@@ -5,33 +5,52 @@ import {
   getUser,
   subscribe,
   unsubscribe,
-  like,
-  dislike,
+  likeOnVideo,
+  dislikeOnVideo,
+  sendFriendRequest,
+  acceptFriendRequest,
+  getMutualFriends,
+  blockUser,
+  unblockUser,
 } from "../controllers/user.js";
 import { verifyToken } from "../verifyToken.js";
 
 const router = express.Router();
 
-//update user
+// Update user
 router.put("/:id", verifyToken, update);
 
-//delete user
+// Delete user
 router.delete("/:id", verifyToken, deleteUser);
 
-//get a user
+// Get a user
 router.get("/find/:id", getUser);
 
-//subscribe a user
+router.get("/getMutual/:id",verifyToken, getMutualFriends);
+
+// Subscribe a user
 router.put("/sub/:id", verifyToken, subscribe);
 
-//unsubscribe a user
+// Unsubscribe a user
 router.put("/unsub/:id", verifyToken, unsubscribe);
 
-//like a video
-router.put("/like/:videoId", verifyToken, like);
+// Like a video
+router.put("/like/:videoId", verifyToken, likeOnVideo);
 
-//dislike a video
-router.put("/dislike/:videoId", verifyToken, dislike);
+// Dislike a video
+router.put("/dislike/:videoId", verifyToken, dislikeOnVideo);
+
+// Send friend request
+router.put("/send-request/:receiverId", verifyToken, sendFriendRequest);
+
+// Accept friend request
+router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
+
+
+// Block user route
+router.post("/block",verifyToken, blockUser);
+router.post("/unblock",verifyToken, unblockUser);
+
 
 
 export default router;

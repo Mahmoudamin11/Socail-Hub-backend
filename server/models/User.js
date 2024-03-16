@@ -24,7 +24,6 @@ const UserSchema = new mongoose.Schema(
     },
     SubscriberedOrFollowed: {
       type: [String],
-    
     },
     SubscribersOrFollowers: {
       type: [String],
@@ -33,8 +32,11 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-  
-  profilePicture: {
+    isAvatarImageSet: {
+      type: Boolean,
+      default: false,
+    },
+    profilePicture: {
       type: String,
       default: "",
     },
@@ -42,7 +44,14 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    
+    savedVideos: {
+      type: [String],
+      default: [],
+    },
+    savedPosts: {
+      type: [String],
+      default: [],
+    },
     isAdmin: {
       type: Boolean,
       default: false,
@@ -55,10 +64,72 @@ const UserSchema = new mongoose.Schema(
       type: String,
       max: 50,
     },
+    friendRequests: [
+      {
+        sender: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        accepted: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+
+
+    communities: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Community",
+      },
+    ],
+   
+    
+    friends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+
+    blockedUsers: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    }],
+
+
+
+    
+    invitations: [
+      {
+        communityId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Community",
+        },
+        senderId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        accepted: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
+ 
+    
+    
+    
+    avatarImage: {
+      type: String,
+      default: "",
+    },
     from: {
       type: String,
       max: 50,
-    }
+    },
+    
   },
   { timestamps: true }
 );

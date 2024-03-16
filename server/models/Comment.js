@@ -1,21 +1,13 @@
-import mongoose from "mongoose";
+// models/Comment.js
+import mongoose from 'mongoose';
 
-const CommentSchema = new mongoose.Schema(
-  {
-    userId: {
-      type: String,
-      required: true,
-    },
-    objectId: {
-      type: String,
-      required: true,
-    },
-    desc: {
-      type: String,
-      required: true,
-    },
-  },
-  { timestamps: true }
-);
+const commentSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  objectId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  desc: { type: String, required: true },
+  replies: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }] // Array of reply comment IDs
+});
 
-export default mongoose.model("Comment", CommentSchema);
+const Comment = mongoose.model('Comment', commentSchema);
+
+export default Comment;
