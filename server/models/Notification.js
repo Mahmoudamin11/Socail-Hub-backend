@@ -7,6 +7,8 @@ const notificationSchema = new mongoose.Schema({
         required: false,
     },
     message: { type: String, required: true },
+    isRead: { type: Boolean, default: false }, // New field to track if notification is read
+
 }, { timestamps: true });
 
 

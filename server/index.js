@@ -1,29 +1,53 @@
-// index.js
+import dotenv from 'dotenv';
+dotenv.config(); // Ensure this is at the top to load environment variables
 
+console.log("Email User:", process.env.EMAIL_USER);
+console.log("Email Pass:", process.env.EMAIL_PASS);
 
-import express from "express";
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import userRoutes from "./routes/users.js";
-import videoRoutes from "./routes/videos.js";
-import commentRoutes from "./routes/comments.js";
-import authRoutes from "./routes/auth.js";
-import cookieParser from "cookie-parser";
-import PostRoutes from "./routes/routPost.js";
-import MessageRoutes from "./routes/messages.js";
-import NotificationRoutes from "./routes/notifications.js";
-import CommunitiesRoutes from "./routes/communities.js";
-import BalanceRoutes from './routes/balances.js';
+import express from 'express';
+import mongoose from 'mongoose';
+import session from 'express-session'; // Added express-session for OTP verification
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import cookieParser from 'cookie-parser';
+import connectDB from './db.js';
+import userRoutes from './routes/users.js';
+import videoRoutes from './routes/videos.js';
+import commentRoutes from './routes/comments.js';
+import authRoutes from './routes/auth.js';
+import postRoutes from './routes/routPost.js';
+import messageRoutes from './routes/messages.js';
+import notificationRoutes from './routes/notifications.js';
+import communitiesRoutes from './routes/communities.js';
+import balanceRoutes from './routes/balances.js';
 import ownerRoutes from './routes/ownners.js';
-import chatGPTRoutes from './routes/chatGPTRoutes.js'; // Import the new route
-import premiumPlanRoutes from './routes/premiumPlanRoutes.js'; // Add this line
-import { createServer } from "http";
-import { Server } from "socket.io";
+import premiumPlanRoutes from './routes/premiumPlanRoutes.js';
+import storeRoutes from './routes/activityRoutes.js';
+import historyRoutes from './routes/historyRoutes.js';
+import reportRoutes from './routes/reports.js';
+import chatRoutes from './routes/chatRoutes.js';
+import callRoutes from './routes/calls.js';
+import { verifyToken } from './verifyToken.js';
+import { auth } from "./firebase.js";
 
-
+console.log("Mongo URI:", process.env.MONGO_URI);
+console.log("Port:", process.env.PORT);
 
 const app = express();
-dotenv.config();
+const PORT = process.env.PORT || 8800;
+
+// Middleware
+app.use(cookieParser());
+app.use(express.json());
+app.use(express.static('public'));
+
+// Added session middleware for OTP handling
+app.use(session({
+  secret: process.env.SESSION_SECRET || "your_secret_key", // Use a strong secret key
+  resave: false,
+  saveUninitialized: true,
+  cookie: { secure: false, maxAge: 10 * 60 * 1000 } // 10 minutes for OTP expiration
+}));
 
 const server = createServer(app);
 const io = new Server(server, {
@@ -36,6 +60,8 @@ const io = new Server(server, {
 global.onlineUsers = new Map();
 io.on("connection", (socket) => {
   global.chatSocket = socket;
+  console.log("New socket connection:", socket.id);
+
   socket.on("add-user", (userId) => {
     onlineUsers.set(userId, socket.id);
   });
@@ -46,52 +72,92 @@ io.on("connection", (socket) => {
       socket.to(sendUserSocket).emit("msg-recieve", data.msg);
     }
   });
+
+  socket.on("call-user", ({ from, to, offer }) => {
+    const targetSocket = onlineUsers.get(to);
+    if (targetSocket) {
+      io.to(targetSocket).emit("call-made", { from, offer });
+    }
+  });
+
+  socket.on("make-answer", ({ from, to, answer }) => {
+    const targetSocket = onlineUsers.get(to);
+    if (targetSocket) {
+      io.to(targetSocket).emit("answer-made", { from, answer });
+    }
+  });
+
+  socket.on("ice-candidate", ({ from, to, candidate }) => {
+    const targetSocket = onlineUsers.get(to);
+    if (targetSocket) {
+      io.to(targetSocket).emit("ice-candidate", { from, candidate });
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Socket disconnected:", socket.id);
+    for (const [userId, socketId] of onlineUsers.entries()) {
+      if (socketId === socket.id) {
+        onlineUsers.delete(userId);
+        break;
+      }
+    }
+  });
 });
 
-const connect = () => {
-  mongoose
-    .connect(process.env.MONGO)
-    .then(() => {
-      console.log("!!!!!!!!!!!!......+++.............******CONNECTED TO MONGO_DB*******.......+++.......!!!!!!!!!!!!!!!");
-    })
-    .catch((err) => {
-      console.error("Failed to connect to MongoDB:", err);
-      process.exit(1);
-    });
-};
+app.post("/api/call", verifyToken, (req, res) => {
+  const { to, offer } = req.body;
+  const from = req.user.id;
 
-const PORT = process.env.Port;
-server.listen(PORT, () => {
-  connect();
-  console.log(`Server is running on port ${PORT}`);
+  const targetSocket = onlineUsers.get(to);
+  if (targetSocket) {
+    io.to(targetSocket).emit("call-made", { from, offer });
+    res.status(200).json({ message: "Call initiated" });
+  } else {
+    res.status(404).json({ message: "User not online" });
+  }
 });
 
-const apiKey = process.env.OPENAI_API_KEY;
-;
- console.log("API Key:", apiKey);
+// Connect to MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+}).then(() => {
+  console.log("MongoDB connected");
+  server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}).catch((error) => {
+  console.error('Connection error', error.message);
+});
 
-app.use(cookieParser());
-app.use(express.json());
+// Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/comments", commentRoutes);
-app.use("/api/routPost", PostRoutes);
-app.use("/api/messages", MessageRoutes);
-app.use("/api/notifications", NotificationRoutes);
-app.use("/api/communities", CommunitiesRoutes);
-app.use("/api/balances", BalanceRoutes);
-app.use("/api/Owners", ownerRoutes);
-app.use('/api/chatgpt', chatGPTRoutes);
-app.use('/api/premium-plans', premiumPlanRoutes); // Adjusted route
+app.use("/api/routPost", postRoutes);
+app.use("/api/messages", messageRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/communities", communitiesRoutes);
+app.use("/api/balances", balanceRoutes);
+app.use("/api/owners", ownerRoutes);
+app.use('/api/premium-plans', premiumPlanRoutes);
+app.use('/api/store', storeRoutes);
+app.use('/api/history', historyRoutes);
+app.use('/api/report', reportRoutes);
+app.use('/api/chatRoutes', chatRoutes);
+app.use('/api/calls', verifyToken, callRoutes);
+app.use('/uploads', express.static('uploads'));
 
+// Global error handler
 app.use((err, req, res, next) => {
   const status = err.status || 500;
   const message = err.message || "Something went wrong!";
+  console.error("Error middleware triggered:", status, message);
   return res.status(status).json({
     success: false,
     status,
     message,
   });
 });
-

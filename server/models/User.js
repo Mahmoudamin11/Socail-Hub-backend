@@ -19,6 +19,12 @@ const UserSchema = new mongoose.Schema(
       required: true,
       min: 6,
     },
+    tempOTP: { // حقل لتخزين رمز OTP
+      type: String,
+    },
+    otpExpires: { // حقل لتخزين تاريخ صلاحية OTP
+      type: Date,
+    },
     img: {
       type: String,
     },
@@ -77,15 +83,13 @@ const UserSchema = new mongoose.Schema(
       },
     ],
 
-
     communities: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Community",
       },
     ],
-   
-    
+
     friends: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -93,14 +97,13 @@ const UserSchema = new mongoose.Schema(
       },
     ],
 
-    blockedUsers: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-    }],
+    blockedUsers: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
 
-
-
-    
     invitations: [
       {
         communityId: {
@@ -117,10 +120,7 @@ const UserSchema = new mongoose.Schema(
         },
       },
     ],
- 
-    
-    
-    
+
     avatarImage: {
       type: String,
       default: "",
@@ -129,7 +129,6 @@ const UserSchema = new mongoose.Schema(
       type: String,
       max: 50,
     },
-    
   },
   { timestamps: true }
 );

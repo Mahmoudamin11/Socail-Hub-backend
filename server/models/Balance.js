@@ -13,6 +13,10 @@ const BalanceSchema = new mongoose.Schema(
     currentCoins: {
       type: Number,
       default: 35 ,
+    }, 
+    lastUpdated: {
+      type: Date,
+      default: null, // حقل لتسجيل آخر وقت تم فيه التحديث
     },
   },
   { timestamps: true }

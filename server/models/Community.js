@@ -24,3 +24,8 @@ const CommunitySchema = new mongoose.Schema(
 );
 
 export default mongoose.model('Community', CommunitySchema);
+
+
+
+
+

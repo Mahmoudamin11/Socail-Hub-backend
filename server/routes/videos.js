@@ -1,7 +1,7 @@
 
 import express from "express";
 import { upload } from "../multerConfig.js"; // Import the upload variable from your Multer configuration file
-import { FindAllUsers, addVideo, uploadVideo, addView, copyUrl, deleteVideo, getByTag, getVideo, random, search, sub, trend, updateVideo, saveVideo, unsaveVideo } from "../controllers/video.js";
+import { FindAllUsers, addVideo, uploadVideo, addView, copyUrl, deleteVideo, getByTag, getVideosByUser, random, search, sub, trend, updateVideo, saveVideo, unsaveVideo } from "../controllers/video.js";
 import { verifyToken } from "../verifyToken.js";
 
 
@@ -13,7 +13,7 @@ const router = express.Router();
 router.post("/", verifyToken,addVideo)
 router.put("/:id", verifyToken, updateVideo)
 router.delete("/:id", verifyToken, deleteVideo)
-router.get("/find/:id", getVideo)
+router.get("/find/:userId", getVideosByUser);
 router.put("/viewMoudel/:id",verifyToken, addView)
 router.get("/trend", trend)
 router.get("/random", random)

@@ -7,6 +7,10 @@ const PremiumPlanSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    userName: {
+      type: String, // Add a field to store the user's name
+      required: true,
+    },
     planType: {
       type: String,
       enum: ['business', 'vip', 'superVIP'],

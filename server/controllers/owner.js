@@ -1,6 +1,7 @@
 // controllers/ownerController.js
 import Owner from '../models/Owner.js';
 import { createError } from '../error.js';
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 export const getAllOwners = async (req, res, next) => {
   try {

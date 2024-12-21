@@ -1,36 +1,23 @@
+// controllers/message.js
 import Message from '../models/Message.js';
 import { createError } from "../error.js";
 import { createNotificationForUser } from './notification.js';
 import Community from '../models/Community.js';
 import User from '../models/User.js';
-
-
-
-
+import { addHistory } from '../controllers/historyController.js';
+import path from 'path';
+import upload from '../upload.js';
 
 // Function to get the full name of a user by their ID
 export const getUserFullName = async (userId) => {
   try {
-      const user = await User.findById(userId);
-      return user ? user.name : '';
+    const user = await User.findById(userId);
+    return user ? user.name : '';
   } catch (error) {
-      console.error('Error getting user full name:', error);
-      return '';
+    console.error('Error getting user full name:', error);
+    return '';
   }
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // Helper function to check if a user is blocked
 const isUserBlocked = async (senderId, receiverId) => {
@@ -43,37 +30,48 @@ const isUserBlocked = async (senderId, receiverId) => {
   }
 };
 
+
+
 export const sendMessage = async (req, res, next) => {
-  try {
-    const senderId = req.user.id;
-    const { receiverId, content } = req.body;
-
-    // Check if the receiver is blocked by the sender
-    const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
-
-    if (isReceiverBlocked) {
-      return res.status(403).json({ success: false, message: 'Cannot send messages to blocked users' });
+  upload.single('media')(req, res, async (err) => {
+    if (err) {
+      console.error(err); // Log the error for debugging
+      return next(createError(500, 'File upload failed'));
     }
 
-    // Create a new message
-    const message = new Message({ senderId, receiverId, content });
-    await message.save();
+    try {
+      const senderId = req.user.id;
+      const { receiverId, content } = req.body;
+      let photoUrl = null;
+      let videoUrl = null;
 
-    // Notify the receiver about the new message
-    const notificationMessage = `${req.user.name} sent you a message: "${content}"`;
-    await createNotificationForUser(senderId, receiverId, notificationMessage);
-    res.status(201).json(message);
-  } catch (error) {
-    next(error);
-  }
+      const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
+
+      if (isReceiverBlocked) {
+        return res.status(403).json({ success: false, message: 'Cannot send messages to blocked users' });
+      }
+
+      if (req.file) {
+        const fileExtension = path.extname(req.file.filename).toLowerCase();
+        if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
+          photoUrl = req.file.path;
+        } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
+          videoUrl = req.file.path;
+        }
+      }
+
+      const message = new Message({ senderId, receiverId, content, photoUrl, videoUrl });
+      await message.save();
+
+      const notificationMessage = `${req.user.name} sent you a message: "${content}"`;
+      await createNotificationForUser(senderId, receiverId, notificationMessage);
+
+      res.status(201).json(message);
+    } catch (error) {
+      next(error);
+    }
+  });
 };
-
-
-
-
-
-
-
 
 
 export const getConversation = async (req, res, next) => {
@@ -94,25 +92,18 @@ export const getConversation = async (req, res, next) => {
   }
 };
 
-
-
-
-
-
-// Function to mark a message as read
 export const markMessageAsRead = async (req, res, next) => {
   try {
     const messageId = req.params.messageId; // Assuming messageId is passed in the request params
     const message = await Message.findById(messageId);
     
-    // Check if the message exists
     if (!message) {
       return next(createError(404, "Message not found"));
     }
 
-    // Mark the message as read
     message.isRead = true;
     await message.save();
+    await addHistory(message.senderId, `isRead_message`);
 
     res.status(200).json({ success: true, message: "Message marked as read" });
   } catch (error) {
@@ -120,15 +111,7 @@ export const markMessageAsRead = async (req, res, next) => {
   }
 };
 
-
-
-
-
-
-
-
 export const getGroupConversations = async (req, res, next) => {
-
   try {
     const { groupId } = req.body; // Assuming groupId is passed in the JSON body
 
@@ -144,49 +127,55 @@ export const getGroupConversations = async (req, res, next) => {
   }
 };
 
-
-
-
-
 // Function to get community members based on communityId
 const getCommunityMembers = async (communityId) => {
   const community = await Community.findById(communityId);
   return community ? community.members : [];
 };
 
-// Function to send messages in communities
 export const sendCommunityMessage = async (req, res, next) => {
-  try {
-      const { communityId, content } = req.body;
-      const senderId = req.user.id; // Assuming you have a logged-in user
+  upload.single('media')(req, res, async (err) => {
+    if (err) {
+      return next(createError(500, 'File upload failed'));
+    }
 
-      // Validate if communityId, content, and senderId are provided
+    try {
+      const { communityId, content } = req.body;
+      const senderId = req.user.id;
+      let photoUrl = null;
+      let videoUrl = null;
+
       if (!communityId || !content || !senderId) {
-          return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
+        return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
       }
 
-      // Get sender's name
+      if (req.file) {
+        const fileExtension = path.extname(req.file.filename).toLowerCase();
+        if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
+          photoUrl = req.file.path;
+        } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
+          videoUrl = req.file.path;
+        }
+      }
+
       const senderName = await getUserFullName(senderId);
 
-      // Get community details
       const community = await Community.findById(communityId);
 
-      // Validate if the community exists
       if (!community) {
-          return res.status(404).json({ success: false, message: 'Community not found' });
+        return res.status(404).json({ success: false, message: 'Community not found' });
       }
 
-      // Get community members
       const members = await getCommunityMembers(communityId);
 
-      // Send the message and create notifications for each member
       members.forEach(async (memberId) => {
-          const notificationMessage = `${senderName} sent a message in the community "${community.name}" - ${content}`;
-          await createNotificationForUser(senderId, memberId, notificationMessage);
+        const notificationMessage = `${senderName} sent a message in the community "${community.name}" - ${content}`;
+        await createNotificationForUser(senderId, memberId, notificationMessage);
       });
 
       res.status(201).json({ success: true, message: 'Community message sent successfully' });
-  } catch (error) {
+    } catch (error) {
       next(error);
-  }
+    }
+  });
 };

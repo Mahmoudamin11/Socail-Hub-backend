@@ -6,87 +6,237 @@ import { createError } from "../error.js";
 import jwt from "jsonwebtoken";
 import Balance from "../models/Balance.js";
 import Owner from '../models/Owner.js';  // Import the Owner model
+import FakeUser from '../models/FakeUser.js';  // Import the FakeUser model
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import { auth } from '../firebase.js'; // Adjust the path accordingly
+import { sendPasswordResetEmail, confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
+import cookieParser from "cookie-parser";
+import express from "express";
+import { sendOTPEmail } from "./OTP.js"; // استيراد وظيفة إرسال البريد
+import SibApiV3Sdk from "sib-api-v3-sdk";
+import session from "express-session";
+
+dotenv.config();
+
+const app = express();
+
+
+dotenv.config();
 
 
 
-export const signup = async (req, res, next) => {
+
+// Initialize Brevo (Sendinblue) API Client
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY2;
+
+// OTP Generator
+const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
+
+// Function to send OTP to email
+export const sendPasswordOTP = async (req, res, next) => {
+  const { email } = req.body;
+
   try {
-    // Hash the password
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(req.body.password, salt);
-
-    // Create a new user
-    const newUser = new User({ ...req.body, password: hash });
-
-    // Save the user
-    await newUser.save();
-
-    // Check if the user's email matches the Admin_Mails
-    const adminEmail = "salahfdasalahfda.11166@gmail.com"; // Use your actual Admin_Mails value
-
-    if (req.body.email === adminEmail) {
-      // If it's an admin email, create an owner account
-      const newOwner = new Owner({
-        name: req.body.name,     // Add the name from the user to the Owner model
-        email: req.body.email,   // Add the email from the user to the Owner model
-        password: hash,          // Use the hashed password
-      });
-      await newOwner.save();
+    const user = await User.findOne({ email });
+    if (!user) {
+      return next(createError(404, "User with this email does not exist!"));
     }
 
-    // Create a balance document for the user
-    await Balance.create({ user: newUser._id, coins: 35 });
+    // Generate OTP and set expiration time
+    const otp = generateOTP();
+    user.tempOTP = otp;
+    user.otpExpires = Date.now() + 10 * 60 * 1000; // OTP valid for 10 minutes
+    await user.save();
 
-    // Send a success response
-    res.status(200).send("User has been created!");
+    // Send OTP email using Brevo
+    const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
+    const sendSmtpEmail = {
+      to: [{ email, name: user.name }],
+      sender: { email: process.env.EMAIL_USER, name: process.env.SenderName },
+      subject: "Password Reset OTP",
+      htmlContent: `<p>Your OTP for password reset is: <strong>${otp}</strong>. It is valid for 10 minutes.</p>`,
+    };
+
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+
+    res.status(200).json({ message: "OTP has been sent to your email." });
   } catch (err) {
-    // Handle errors
     next(err);
   }
 };
 
+// Function to verify OTP and reset password
+export const verifyOTPAndResetPassword = async (req, res, next) => {
+  const { email, otp, newPassword } = req.body;
 
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return next(createError(404, "User with this email does not exist!"));
+    }
 
+    // Check if OTP matches and is not expired
+    if (otp !== user.tempOTP || Date.now() > user.otpExpires) {
+      return next(createError(400, "Invalid or expired OTP!"));
+    }
 
+    // Hash the new password
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(newPassword, salt);
 
+    // Update password and clear OTP
+    user.password = hashedPassword;
+    user.tempOTP = null;
+    user.otpExpires = null;
+    await user.save();
+
+    res.status(200).json({ message: "Password has been reset successfully!" });
+  } catch (err) {
+    next(err);
+  }
+};
 
 
 
 
 export const signin = async (req, res, next) => {
   try {
-    const user = await User.findOne({ name: req.body.name });
-    if (!user) {
-      return next(createError(404, "Username or Password is incorrect!"));
+    const { name, password } = req.body;
+
+    // Step 1: Find user
+    const user = await User.findOne({ name });
+    if (!user) return next(createError(404, "Username or password is incorrect!"));
+
+    // Step 2: Verify password
+    const isCorrect = await bcrypt.compare(password, user.password);
+    if (!isCorrect) return next(createError(400, "Username or password is incorrect!"));
+
+    // Step 3: Check or update user's balance
+    let userBalance = await Balance.findOne({ user: user._id });
+    const now = new Date();
+
+    if (!userBalance) {
+      // If no balance record exists, create one with 85 coins
+      userBalance = await Balance.create({
+        user: user._id,
+        currentCoins: 85,
+        lastUpdated: now,
+      });
+    } else {
+      // Check if 24 hours have passed since the last update
+      const lastUpdated = userBalance.lastUpdated || new Date(0); // Default to epoch time if null
+      const hoursSinceLastUpdate = (now - lastUpdated) / (1000 * 60 * 60); // Convert ms to hours
+
+      if (hoursSinceLastUpdate >= 24) {
+        userBalance.currentCoins += 85; // Add 85 coins
+        userBalance.lastUpdated = now; // Update lastUpdated
+        await userBalance.save();
+      }
     }
 
-    const isCorrect = await bcrypt.compare(req.body.password, user.password);
-    if (!isCorrect) {
-      return next(createError(400, "Username or Password is incorrect!"));
-    }
+    // Step 4: Generate tokens
+    const accessToken = jwt.sign({ id: user._id, name: user.name }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
 
-    // Include the user's name in the JWT payload
-    const token = jwt.sign({ id: user._id, name: user.name }, process.env.JWT);
+    user.refreshToken = refreshToken;
+    await user.save();
 
-    // Omit the password field from the response
-    const { password, ...others } = user._doc;
+    res.cookie("access_token", accessToken, { httpOnly: true, secure: true, sameSite: "Strict" });
+    res.cookie("refresh_token", refreshToken, { httpOnly: true, secure: true, sameSite: "Strict" });
 
-    // Set the JWT token as a cookie named 'access_token'
-    res.cookie("access_token", token, { httpOnly: true });
+    const { password: _, refreshToken: __, ...userData } = user._doc;
 
-    // Send the user data in the response
-    res.status(200).json(others);
+    res.status(200).json({
+      success: true,
+      message: "Login successful!",
+      accessToken,
+      refreshToken,
+      user: userData,
+      balance: userBalance.currentCoins, // Return the user's updated balance
+    });
   } catch (err) {
     next(err);
   }
 };
 
 
+
+
+export const signup = async (req, res, next) => {
+  try {
+    const { email, name, password, otp } = req.body;
+
+    // Step 1: Check if OTP is provided
+    if (!otp) {
+      // Generate OTP
+      const generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Check if user already exists
+      const existingUser = await User.findOne({ email });
+      if (existingUser) {
+        return next(createError(400, "Email already exists."));
+      }
+
+      // Temporarily store OTP and related data in memory
+      req.session = req.session || {};
+      req.session.tempUser = { name, email, password: bcrypt.hashSync(password, 10), otp: generatedOTP, otpExpires: Date.now() + 10 * 60 * 1000 };
+
+      // Send OTP email
+      await sendOTPEmail(email, generatedOTP);
+
+      return res.status(202).json({
+        success: true,
+        message: "OTP has been sent to your email. Please verify to complete sign-up.",
+      });
+    }
+
+    // Step 2: Verify OTP
+    if (!req.session || !req.session.tempUser) {
+      return next(createError(400, "No OTP session found. Please request a new OTP."));
+    }
+
+    const { tempUser } = req.session;
+
+    if (otp !== tempUser.otp || Date.now() > tempUser.otpExpires) {
+      return next(createError(400, "Invalid or expired OTP."));
+    }
+
+    // Save user data after OTP verification
+    const newUser = new User({
+      name: tempUser.name,
+      email: tempUser.email,
+      password: tempUser.password,
+    });
+
+    await newUser.save();
+
+    // Clear session OTP data
+    req.session.tempUser = null;
+
+    return res.status(200).json({
+      success: true,
+      message: "Sign-up successful! You can now log in.",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
+
+
+
+
+
+
 export const googleAuth = async (req, res, next) => {
   try {
     const user = await User.findOne({ email: req.body.email });
     if (user) {
-      const token = jwt.sign({ id: user._id }, process.env.JWT);
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
       res
         .cookie("access_token", token, {
           httpOnly: true,
@@ -99,14 +249,53 @@ export const googleAuth = async (req, res, next) => {
         fromGoogle: true,
       });
       const savedUser = await newUser.save();
-      const token = jwt.sign({ id: savedUser._id }, process.env.JWT);
+      const token = jwt.sign({ id: savedUser._id }, process.env.JWT_SECRET);
       res
         .cookie("access_token", token, {
           httpOnly: true,
         })
         .status(200)
         .json(savedUser._doc);
+      await addHistory(req.user.id, `You signed up with Google`);
     }
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const sendPasscode = async (req, res, next) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return next(createError(404, "User with this email does not exist!"));
+    }
+
+    // Use Firebase to send password reset email
+    await sendPasswordResetEmail(auth, email);
+
+    console.log(`Password reset email sent to: ${email}`);
+
+    res.status(200).json({ message: 'Passcode sent to your email!' });
+  } catch (err) {
+    console.error("Error sending passcode:", err);
+    next(err);
+  }
+};
+
+// Function to reset password
+export const resetPassword = async (req, res, next) => {
+  const { oobCode, newPassword } = req.body;
+
+  try {
+    // Verify the password reset code
+    await verifyPasswordResetCode(auth, oobCode);
+
+    // Confirm the password reset with the code and new password
+    await confirmPasswordReset(auth, oobCode, newPassword);
+
+    res.status(200).json({ message: 'Password has been changed!' });
   } catch (err) {
     next(err);
   }

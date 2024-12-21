@@ -4,6 +4,7 @@ import { createError } from "../error.js";
 import Balance from '../models/Balance.js';
 import { createSystemNotificationForUser } from './notification.js';
 import User from '../models/User.js';
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 
 
@@ -32,7 +33,7 @@ export const getBalance = async (req, res, next) => {
 };
 
 
-
+//random Bouns
 export const deductCoins = async (req, res, next) => {
   try {
     const { userId } = req.body;

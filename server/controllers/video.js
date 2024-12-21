@@ -3,6 +3,7 @@ import Video from "../models/Video.js";
 import { createError } from "../error.js";
 import View from '../models/View.js';
 import { createNotificationsForSubscribersOrFollowers } from '../controllers/notification.js';
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 
 
@@ -26,6 +27,7 @@ export const addVideo = async (req, res, next) => {
 
     // Create a notification for each subscriber or follower
     await createNotificationsForSubscribersOrFollowers(req.user.id, message);
+    await addHistory(req.user.id, `You Add New Video : ${savedVideo.title}" `);
 
     // Respond with the saved video
     res.status(200).json(savedVideo);
@@ -81,6 +83,8 @@ export const deleteVideo = async (req, res, next) => {
     if (!video) return next(createError(404, "Video not found!"));
     if (req.user.id === video.userId) {
       await Video.findByIdAndDelete(req.params.id);
+      await addHistory(req.user.id, `You Delete Video : ${video.title}" `);
+
       res.status(200).json("The video has been deleted.");
     } else {
       return next(createError(403, "You can delete only your video!"));
@@ -90,14 +94,28 @@ export const deleteVideo = async (req, res, next) => {
   }
 };
 
-export const getVideo = async (req, res, next) => {
+export const getVideosByUser = async (req, res, next) => {
   try {
-    const video = await Video.findById(req.params.id);
-    res.status(200).json(video);
+    const { userId } = req.params; // Extract userId from the URL
+    console.log("Fetching videos for userId:", userId); // Debugging log
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: "User ID is required" });
+    }
+
+    const videos = await Video.find({ userId });
+
+    if (!videos.length) {
+      return res.status(404).json({ success: false, message: "No videos found for this user." });
+    }
+
+    res.status(200).json({ success: true, videos });
   } catch (err) {
+    console.error("Error fetching videos:", err.message); // Log the error
     next(err);
   }
 };
+
 
 
 
@@ -242,6 +260,7 @@ export const search = async (req, res, next) => {
 export const saveVideo = async (req, res, next) => {
   const userId = req.user.id;
   const videoId = req.params.id;
+  const video = await Video.findById(videoId);
 
   try {
     // Find the user by ID
@@ -264,6 +283,7 @@ export const saveVideo = async (req, res, next) => {
     // Add the video ID to the user's savedVideos array
     user.savedVideos.push(videoId);
     await user.save();
+    await addHistory(req.user.id, `You Save Video : ${video.title}" `);
 
     res.status(200).json({ success: true, message: "Video saved successfully" });
   } catch (err) {
@@ -288,6 +308,7 @@ export const unsaveVideo = async (req, res, next) => {
     // Remove the video from saved list
     user.savedVideos = user.savedVideos.filter(id => id !== req.params.id);
     await user.save();
+    await addHistory(req.user.id, `You Unsave Video : ${video.title}" `);
 
     res.status(200).json({ message: "Video unsaved successfully." });
   } catch (err) {
@@ -337,6 +358,7 @@ export const uploadVideo = async (req, res) => {
       });
 
       await newVideo.save();
+      await addHistory(req.user.id, `You Uploded Video : ${newVideo.title}" `);
 
       res.status(200).json({ success: true, message: 'Video uploaded successfully', video: newVideo });
   } catch (error) {

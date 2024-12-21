@@ -3,6 +3,7 @@ import { createError } from "../error.js";
 import User from "../models/User.js";
 import { createNotificationsForSubscribersOrFollowers } from '../controllers/notification.js';
 import { createNotificationForOwner } from './notification.js'; // Assuming you have the notification functions in a separate file
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 
 export const addPost = async (req, res, next) => {
@@ -22,11 +23,13 @@ export const addPost = async (req, res, next) => {
 
     // Create notifications for subscribers or followers
     await createNotificationsForSubscribersOrFollowers(req.user.id, message);
+    await addHistory(req.user.id, `You Added (Post)"`);
 
     res.status(200).json(savedPost);
   } catch (err) {
     next(err);
   }
+
 };
 
 
@@ -41,6 +44,8 @@ export const updatePost = async (req, res, next) => {
         { new: true }
       );
       res.status(200).json(updatedPost);
+      await addHistory(req.user.id, `You Updated Your Post : ${founded.title}`);
+
     } else {
       return next(createError(403, "You can update only your Post!"));
     }
@@ -55,6 +60,8 @@ export const deletePost = async (req, res, next) => {
     if (!founded) return next(createError(404, "Post not found!"));
     if (req.user.id === founded.userId) {
       await Post.findByIdAndDelete(req.params.id);
+      await addHistory(req.user.id, `You Deleted Your Post : ${founded.title}`);
+
       res.status(200).json("The Post has been deleted.");
     } else {
       return next(createError(403, "You can delete only your Post!"));
@@ -64,14 +71,19 @@ export const deletePost = async (req, res, next) => {
   }
 };
 
+// Controller to fetch posts by user ID
 export const getPostsById = async (req, res, next) => {
   const userId = req.params.id;
-  
+
   try {
     const posts = await Post.find({ userId });
-    res.status(200).json(posts);
+    if (!posts) {
+      return res.status(404).json({ success: false, message: "No posts found for this user." });
+    }
+    res.status(200).json({ success: true, posts });
   } catch (err) {
-    next(err);
+    console.error("Error fetching posts:", err.message);
+    next(err); // Pass error to middleware
   }
 };
 
@@ -133,10 +145,11 @@ export const likePost = async (req, res, next) => {
 
     const loggedInUser = await User.findById(loggedInUserId);
     const loggedInUserName = loggedInUser.name;
-    
+
     // Notify the owner of the post
     const notificationMessage = `"${loggedInUserName}" liked your post`; // Customize the message as needed
     await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
+    await addHistory(req.user.id, `You Liked On Post : ${post.title}`);
 
     res.status(200).json({ message: 'Post liked successfully' });
   } catch (err) {
@@ -196,6 +209,7 @@ export const dislikePost = async (req, res, next) => {
     const ownerId = post.userId; // Assuming 'userId' field in Post model represents the owner's user ID
     const notificationMessage = `"${loggedInUserName}" disliked your post`; // Use the user's name in the message
     await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
+    await addHistory(req.user.id, `You Disliked On Post : ${post.title}`);
 
     res.status(200).json({ message: 'Post disliked successfully' });
   } catch (err) {
@@ -244,12 +258,16 @@ export const savePost = async (req, res, next) => {
     // Notify the owner of the post
     const notificationMessage = `"${loggedInUserName}" saved your post`; // Use the user's name in the message
     await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
+    await addHistory(req.user.id, `You Saved This Post : ${post.title}`);
 
     res.status(200).json({ success: true, message: 'Post saved successfully' });
   } catch (err) {
     next(err);
   }
 };
+
+
+
 
 export const unsavePost = async (req, res, next) => {
   try {
@@ -280,6 +298,7 @@ export const unsavePost = async (req, res, next) => {
     // Notify the owner of the post
     const notificationMessage = `${loggedInUserName} unsaved your post`; // Use the user's name in the message
     await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
+    await addHistory(req.user.id, `You Unsaved This Post : ${post.title}`);
 
     res.status(200).json({ message: 'Post unsaved successfully.' });
   } catch (err) {

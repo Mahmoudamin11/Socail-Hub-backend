@@ -2,6 +2,7 @@ import Community from '../models/Community.js';
 import User from '../models/User.js';
 import { createNotificationForUser, sendNotificationsToCommunityMembers,createNotificationForOwner } from './notification.js';
 import Notification from '../models/Notification.js';
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 
 
@@ -30,7 +31,8 @@ export const createCommunity = async (req, res) => {
       community.admins.push(req.user.id);
       community.members.push(req.user.id);
       await community.save();
-  
+
+    await addHistory(req.user.id, `Created Community: ${name}`);
       res.status(201).json({ community, message: 'Community created successfully' });
     } catch (error) {
       console.error(error);
@@ -38,51 +40,66 @@ export const createCommunity = async (req, res) => {
     }
   };
   
-  // Function to send an invitation to a user
-  export const sendInvitation = async (req, res) => {
-      try {
-          const { communityId, userId } = req.body;
-  
-          // Check if the user is already a member of the community
-          const community = await Community.findById(communityId);
-          if (community.members.includes(userId)) {
-              return res.status(400).json({ message: 'User is already a member of the community' });
-          }
-  
+// Function to send an invitation to a user
+export const sendInvitation = async (req, res) => {
+  try {
+    const { communityId, userId } = req.body;
 
-            
+    // Find the community
+    const community = await Community.findById(communityId);
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
+
+    // Check if the sender is an admin of the community
+    if (!community.admins.includes(req.user.id)) {
+      return res.status(403).json({ message: 'Only admins can send invitations' });
+    }
+
+    // Check if the user is already a member of the community
+    if (community.members.includes(userId)) {
+      return res.status(400).json({ message: 'User is already a member of the community' });
+    }
+
     // Check if the receiver is blocked by the sender
+    const senderId = req.user.id;
+    const receiverId = userId; // Assuming userId is the receiver's ID
     const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
 
     if (isReceiverBlocked) {
       return res.status(403).json({ success: false, message: 'Cannot send invitation to blocked users' });
     }
 
+    // Check if an invitation has already been sent to the user
+    const user = await User.findById(userId);
+    if (user.invitations.some(invitation => invitation.communityId && invitation.communityId.equals(communityId))) {
+      return res.status(400).json({ message: 'Invitation already sent to this user' });
+    }
+
+    // Send the invitation
+    user.invitations.push({ communityId, senderId: req.user.id, accepted: false }); // Include communityId in the invitation
+    await user.save();
+
+    // Create a notification for the user
+    const invitationMessage = `${req.user.name} invited you to join the community "${community.name}"`;
+    await createNotificationForUser(req.user.id, userId, invitationMessage);
+    await addHistory(req.user.id, `Send Invitation for Community: "${community.name}"  To :"${user.name}" `);
+
+    res.status(200).json({ message: 'Invitation sent successfully' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+  
 
 
 
-          // Check if an invitation has already been sent to the user
-          const user = await User.findById(userId);
-          if (user.invitations.some(invitation => invitation.communityId && invitation.communityId.equals(communityId))) {
-              return res.status(400).json({ message: 'Invitation already sent to this user' });
-          }
-  
-          // Send the invitation
-          user.invitations.push({ communityId, senderId: req.user.id, accepted: false }); // Include communityId in the invitation
-          await user.save();
-  
-          // Create a notification for the user
-          const invitationMessage = `${req.user.name} invited you to join the community "${community.name}"`;
-          await createNotificationForUser(req.user.id, userId, invitationMessage);
-  
-          res.status(200).json({ message: 'Invitation sent successfully' });
-      } catch (error) {
-          console.error(error);
-          res.status(500).json({ message: 'Server Error' });
-      }
-  };
-  
-  // Function to accept an invitation
+
+
+
+// Function to accept an invitation
 export const acceptInvitation = async (req, res) => {
   try {
       const { communityId } = req.body;
@@ -111,6 +128,10 @@ export const acceptInvitation = async (req, res) => {
       // Add the user to the community members
       const community = await Community.findById(communityId);
       community.members.push(req.user.id);
+
+      // Add the community to the user's communities list
+      user.communities.push(communityId);
+
       await community.save();
 
       // Remove the invitation from the user's list
@@ -123,6 +144,7 @@ export const acceptInvitation = async (req, res) => {
 
       // Send notifications to all community members about the new member
       await sendNotificationsToCommunityMembers(community.id, req.user.id);
+      await addHistory(req.user.id, `accepted Invitation for Community: "${community.name}"`);
 
       res.status(200).json({ message: 'Invitation accepted successfully' });
   } catch (error) {
@@ -145,3 +167,125 @@ const isUserBlocked = async (senderId, receiverId) => {
       return false;
     }
   };
+
+
+
+
+
+// Function to delete a community permanently and restrict to admin only
+export const deleteCommunityFromMyCommunities = async (req, res) => {
+  try {
+      const { communityId } = req.params; // Extract communityId from request parameters
+
+      // Find the community
+      const community = await Community.findById(communityId);
+      if (!community) {
+          return res.status(404).json({ message: 'Community not found' });
+      }
+
+      // Check if the requesting user is an admin of the community
+      if (!community.admins.includes(req.user.id)) {
+          return res.status(403).json({ message: 'You are not authorized to {DELETE} this community' });
+      }
+
+      // Delete the community permanently from the database
+      await Community.findByIdAndDelete(communityId);
+
+      // Remove the community from all its members
+      await User.updateMany(
+          { communities: communityId },
+          { $pull: { communities: communityId } }
+      );
+
+      // Add history entry
+      await addHistory(req.user.id, `Permanently Deleted Community: "${community.name}"`);
+
+      res.status(200).json({ message: 'Community deleted permanently successfully' });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+
+
+// Function to get a community by its ID
+export const getCommunityById = async (req, res) => {
+  try {
+      const { communityId } = req.params; // Extract communityId from request parameters
+
+      // Fetch the community by its ID
+      const community = await Community.findById(communityId)
+          .populate('admins', 'name email') // Populate admin details
+          .populate('members', 'name email'); // Populate member details
+
+      if (!community) {
+          return res.status(404).json({ message: 'Community not found' });
+      }
+
+      res.status(200).json({ community });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Server Error' });
+  }
+};
+
+// Function to allow a user to exit a community
+export const exitCommunity = async (req, res) => {
+  try {
+      const { communityId } = req.params; // Extract communityId from request parameters
+
+      // Find the community
+      const community = await Community.findById(communityId);
+      if (!community) {
+          return res.status(404).json({ message: 'Community not found' });
+      }
+
+      // Check if the user is a member of the community
+      if (!community.members.includes(req.user.id)) {
+          return res.status(400).json({ message: 'You are not a member of this community' });
+      }
+
+      // If the user is an admin, handle admin reassignment
+      if (community.admins.includes(req.user.id)) {
+          // Remove the current admin from the admin list
+          community.admins = community.admins.filter(adminId => adminId.toString() !== req.user.id);
+
+          // Assign a new admin if there are other members
+          if (community.members.length > 1) {
+              const newAdminId = community.members.find(memberId => memberId.toString() !== req.user.id);
+              if (newAdminId) {
+                  community.admins.push(newAdminId);
+
+                  // Add the community to the new admin's communities list only if not already present
+                  const newAdmin = await User.findById(newAdminId);
+                  if (newAdmin && !newAdmin.communities.includes(communityId)) {
+                      newAdmin.communities.push(communityId);
+                      await newAdmin.save();
+                  }
+
+                  // Notify the new admin
+                  const notificationMessage = `You have been assigned as the new admin of the community "${community.name}".`;
+                  await createNotificationForUser(req.user.id, newAdminId, notificationMessage);
+              }
+          }
+      }
+
+      // Remove the user from the community's members list
+      community.members = community.members.filter(memberId => memberId.toString() !== req.user.id);
+      await community.save();
+
+      // Remove the community from the user's communities list
+      const user = await User.findById(req.user.id);
+      user.communities = user.communities.filter(id => id.toString() !== communityId);
+      await user.save();
+
+      // Add history entry
+      await addHistory(req.user.id, `Exited Community: "${community.name}"`);
+
+      res.status(200).json({ message: 'You have exited the community successfully' });
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: 'Server Error' });
+  }
+};

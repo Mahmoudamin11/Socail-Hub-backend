@@ -4,12 +4,14 @@ import express from "express";
 import {verifyToken} from "../verifyToken.js"
 
 const router = express.Router();
-import { createNotificationsForSubscribersOrFollowers,getNotificationsByUserId,getNotificationsByUser } from '../controllers/notification.js';
+import { createNotificationsForSubscribersOrFollowers,newNotifications,getNotificationsByUserId,getNotificationsByUser,markNotificationsAsRead } from '../controllers/notification.js';
 
 // Create a notification
 router.post('/', verifyToken,createNotificationsForSubscribersOrFollowers);
 
-router.get('/:userId', getNotificationsByUserId);
+router.get('/:userId',verifyToken, getNotificationsByUserId);
+router.get('/New/:userId',verifyToken,newNotifications );
+router.get('/MarkIsRead/:userId',verifyToken,markNotificationsAsRead );
 
 
 // Get notifications for a user

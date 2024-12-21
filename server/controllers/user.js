@@ -8,6 +8,7 @@ import { createNotificationsForSubscribersOrFollowers } from '../controllers/not
 import { addCoins } from './balance.js'; // Assuming you have the notification functions in a separate file
 import { createSystemNotificationForUser } from '../controllers/notification.js';
 import { deductCoinsNew } from '../controllers/balance.js'; // Adjust the path accordingly
+import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 
 import { getBalance } from './balance.js';
 
@@ -130,13 +131,16 @@ export const subscribe = async (req, res, next) => {
       return res.status(400).json("You cannot subscribe to your own channel.");
     }
     
+    // Define senderId and receiverId for checking blocked users
+    const senderId = loggedInUserId;
+    const receiverId = videoOwnerId;
+    
     // Check if the receiver is blocked by the sender
     const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
 
     if (isReceiverBlocked) {
       return res.status(403).json({ success: false, message: 'Cannot subscribe to blocked users' });
     }
-
 
     // Check if the current user is already subscribed to the channel
     const videoOwner = await User.findById(videoOwnerId);
@@ -164,12 +168,16 @@ export const subscribe = async (req, res, next) => {
     // Notify the channel owner about the new subscriber
     const notificationMessage = `${loggedInUserName} subscribed to your channel`; // Use the user's name in the message
     await createNotificationForOwner(loggedInUserId, videoOwnerId, notificationMessage);
+    
+    // Add subscription history
+    await addHistory(loggedInUserId, `You Subscribed to  : ${videoOwner.name} channel.`);
 
     res.status(200).json("Subscription successful.");
   } catch (err) {
     next(err);
   }
 };
+
 
 
 export const unsubscribe = async (req, res, next) => {
@@ -200,10 +208,12 @@ export const unsubscribe = async (req, res, next) => {
 
     // Retrieve the user's name
     const loggedInUserName = user.name;
+    const videoOwner = await User.findById(videoOwnerId);
 
     // Notify the channel owner about the unsubscription
     const notificationMessage = `${loggedInUserName} unsubscribed from your channel`; // Use the user's name in the message
     await createNotificationForOwner(loggedInUserId, videoOwnerId, notificationMessage);
+    await addHistory(loggedInUserId, `You Unsubscribed to : ${videoOwner.name} channel.`);
 
     res.status(200).json("Unsubscription successful.");
   } catch (err) {
@@ -252,6 +262,8 @@ export const likeOnVideo = async (req, res, next) => {
         const ownerUserId = video.userId;
         const notificationMessage = `"${loggedInUserName}" liked your video`;
         await createNotificationForOwner(loggedInUserId, ownerUserId, notificationMessage);
+        await addHistory(loggedInUserId, `You Liked On Video   : ${video.title}" channel.`);
+
       }
     } else {
       // Handle the case when videoId is not provided
@@ -264,12 +276,11 @@ export const likeOnVideo = async (req, res, next) => {
   }
 };
 
+
+
 export const dislikeOnVideo = async (req, res, next) => {
   const loggedInUserId = req.user.id;
   const videoId = req.params.videoId;
-if (isReceiverBlocked) {
-      return res.status(403).json({ success: false, message: 'Cannot Dislike to blocked users' });
-    }
 
   try {
     let message = ""; // Initialize a variable to store the message
@@ -281,15 +292,17 @@ if (isReceiverBlocked) {
         return next(createError(404, "Video not found"));
       }
 
+      // Check if the receiver is blocked by the sender
+      const senderId = loggedInUserId;
+      const receiverId = video.userId;
+      const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
+      if (isReceiverBlocked) {
+        return res.status(403).json({ success: false, message: 'Cannot Dislike to blocked users' });
+      }
 
-      
-    // Check if the receiver is blocked by the sender
-    const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
-
-    
       // Check if the user has already disliked the video
       if (video.dislikes.includes(loggedInUserId)) {
-        message = "You have already disliked this video. You cannot dislike on it again.";
+        message = "You have already disliked this video. You cannot dislike it again.";
       } else {
         // If the user has not disliked the video, update the dislikes
         await Video.findByIdAndUpdate(videoId, {
@@ -302,8 +315,10 @@ if (isReceiverBlocked) {
         const loggedInUserName = loggedInUser.name;
         // Notify the owner of the video
         const ownerUserId = video.userId;
-        const notificationMessage = `"${loggedInUserName}" Disliked On your video`;
+        const notificationMessage = `${loggedInUserName} disliked your video`;
         await createNotificationForOwner(loggedInUserId, ownerUserId, notificationMessage);
+        await addHistory(loggedInUserId, `You Disliked On Video   : ${video.title}" channel.`);
+
       }
     } else {
       // Handle the case when videoId is not provided
@@ -363,6 +378,7 @@ export const sendFriendRequest = async (req, res, next) => {
     const senderUser = await User.findById(senderId);
     const notificationMessage = `${senderUser.name} sent you a friend request.`;
     await createNotificationForOwner(senderId, receiverId, notificationMessage);
+    await addHistory(req.user.id, `You Send Frind Request To : ${receiver.name}" `);
 
     res.status(200).json("Friend request sent successfully.");
   } catch (err) {
@@ -407,6 +423,7 @@ export const acceptFriendRequest = async (req, res, next) => {
     const senderUser = await User.findById(senderId);
     const notificationMessageForSender = `${user.name} accepted your friend request.`;
     await createNotificationForOwner(userId, senderId, notificationMessageForSender);
+    await addHistory(req.user.id, `You Accept Frind Request From : ${sender.name}" `);
 
     
     res.status(200).json("Friend request accepted successfully.");
@@ -514,6 +531,7 @@ export const blockUser = async (req, res, next) => {
     // Notify the blocked user
     const notificationMessage = `${req.user.name} blocked you, and all relations have been cut.`;
     await createNotificationForOwner(loggedInUserId, userToBlockId, notificationMessage);
+    await addHistory(req.user.id, `You Bloked Your Frind  : ${userToBlock.name}" `);
 
     res.status(200).json("User blocked successfully. All relations have been cut.");
   } catch (err) {
@@ -576,6 +594,7 @@ export const unblockUser = async (req, res, next) => {
     // Notify the unblocked user
     const notificationMessage = `${user.name} unblocked you, and all relations have been restored.`;
     await createSystemNotificationForUser(userToUnblockId, notificationMessage);
+    await addHistory(req.user.id, `You UnBloked Your Frind  : ${userToUnblock.name}" `);
 
     console.log('End of unblockUser function');
 
@@ -600,3 +619,111 @@ const isUserBlocked = async (senderId, receiverId) => {
     return false;
   }
 };
+
+import mongoose from 'mongoose';
+
+export const getRandomUsers = async (req, res, next) => {
+  const userId = req.user.id; // Assuming user ID is available from authentication middleware
+  const { page = 1 } = req.query; // Default to page 1 if not provided
+  const pageSize = 10; // Number of users to return per page
+
+  try {
+    // Get the current user's data to exclude friends and prioritize followers
+    const currentUser = await User.findById(userId).select("friends SubscribersOrFollowers");
+
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { friends, SubscribersOrFollowers } = currentUser;
+
+    // Exclude friends and the current user from the search
+    const excludedIds = [...friends.map(friend => friend.toString()), userId.toString()];
+
+    // Fetch users, prioritizing followers, and randomize
+    const users = await User.aggregate([
+      {
+        $match: {
+          _id: { $nin: excludedIds.map(id => new mongoose.Types.ObjectId(id)) }, // Exclude friends and current user
+        },
+      },
+      {
+        $addFields: {
+          isFollower: { $in: ["$_id", SubscribersOrFollowers.map(id => new mongoose.Types.ObjectId(id))] },
+        },
+      },
+      {
+        $sample: { size: pageSize }, // Randomize the selection
+      },
+      {
+        $project: {
+          name: 1,
+          email: 1,
+          profilePicture: 1,
+          isFollower: 1,
+        },
+      },
+    ]);
+
+    if (!users.length) {
+      return res.status(404).json({ message: "No more users available." });
+    }
+
+    res.status(200).json({ success: true, users });
+  } catch (err) {
+    next(err); // Pass errors to the global error handler
+  }
+};
+
+
+
+
+
+export const advancedUserSearch = async (req, res, next) => {
+  const { query } = req.body; // Expecting 'query' from the request body
+  const userId = req.user.id; // Assuming user ID is available from authentication middleware
+
+  try {
+    if (!query || query.trim().length === 0) {
+      return res.status(400).json({ message: "Search query cannot be empty." });
+    }
+
+    // Build a regular expression for advanced matching
+    const searchRegex = new RegExp(`^${query.split(" ").join(".*")}`, "i");
+
+    // Get the current user to access friends and followers
+    const currentUser = await User.findById(userId).select("friends SubscribersOrFollowers");
+
+    if (!currentUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const { friends, SubscribersOrFollowers } = currentUser;
+
+    // Find users matching the query, excluding friends and the current user
+    const users = await User.find({
+      _id: { $nin: [...friends, userId] }, // Exclude friends and the current user
+      name: { $regex: searchRegex },
+    }).select("name email profilePicture");
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: "No users found matching your query." });
+    }
+
+    // Sort users: followers first, others last
+    const sortedUsers = users.sort((a, b) => {
+      const aIsFollower = SubscribersOrFollowers.includes(a._id.toString());
+      const bIsFollower = SubscribersOrFollowers.includes(b._id.toString());
+
+      if (aIsFollower && !bIsFollower) return -1;
+      if (!aIsFollower && bIsFollower) return 1;
+      return 0;
+    });
+
+    res.status(200).json({ success: true, users: sortedUsers });
+  } catch (err) {
+    next(err); // Pass errors to the global error handler
+  }
+};
+
+

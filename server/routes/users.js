@@ -12,6 +12,8 @@ import {
   getMutualFriends,
   blockUser,
   unblockUser,
+  advancedUserSearch,
+  getRandomUsers
 } from "../controllers/user.js";
 import { verifyToken } from "../verifyToken.js";
 
@@ -25,6 +27,7 @@ router.delete("/:id", verifyToken, deleteUser);
 
 // Get a user
 router.get("/find/:id", getUser);
+router.get("/getRandomUsers",verifyToken, getRandomUsers);
 
 router.get("/getMutual/:id",verifyToken, getMutualFriends);
 
@@ -49,6 +52,8 @@ router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
 
 // Block user route
 router.post("/block",verifyToken, blockUser);
+router.post("/Search_Users_Name",verifyToken,advancedUserSearch );
+
 router.post("/unblock",verifyToken, unblockUser);
 
 
