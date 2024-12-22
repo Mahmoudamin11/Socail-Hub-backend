@@ -4,6 +4,7 @@ import { createError } from "../error.js";
 import View from '../models/View.js';
 import { createNotificationsForSubscribersOrFollowers } from '../controllers/notification.js';
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import { encrypt } from './bycripting_algorithem.js'; // استدعاء ملف التشفير
 
 
 
@@ -11,32 +12,46 @@ import { addHistory } from '../controllers/historyController.js'; // Import the 
 
 
 export const addVideo = async (req, res, next) => {
-  // Create a new video
-  const newVideo = new Video({ userId: req.user.id, ...req.body });
   try {
+    // العثور على المستخدم
     const user = await User.findById(req.user.id);
     if (!user) {
       return next(createError(404, "User not found"));
     }
-    
-    // Save the new video
+
+    // إنشاء النص الأساسي لتشفير videoKey
+    const uniqueIdentifier = `${req.user.id}-${Date.now()}-${Math.random()}`;
+    const appName = "Social_Hub";
+
+    // تشفير videoKey باستخدام الوظيفة المستدعاة
+    const videoKey = `${encrypt(uniqueIdentifier)}-${appName}`;
+
+    // إنشاء فيديو جديد
+    const newVideo = new Video({
+      userId: req.user.id,
+      videoKey,
+      ...req.body,
+    });
+
+    // حفظ الفيديو الجديد
     const savedVideo = await newVideo.save();
-    
-    // Create a notification message
-    const message = `New video added: ${savedVideo.title}  Link:- ${savedVideo.videoUrl} --->>> By ${user.name}`;
 
-    // Create a notification for each subscriber or follower
+    // إنشاء رسالة إشعار
+    const message = `New video added: ${savedVideo.title} Link: ${savedVideo.videoUrl} --->>> By ${user.name}`;
+
+    // إنشاء الإشعارات للمشتركين أو المتابعين
     await createNotificationsForSubscribersOrFollowers(req.user.id, message);
-    await addHistory(req.user.id, `You Add New Video : ${savedVideo.title}" `);
 
-    // Respond with the saved video
+    // إضافة سجل النشاط
+    await addHistory(req.user.id, `You added a new video: ${savedVideo.title}`);
+
+    // استجابة النجاح
     res.status(200).json(savedVideo);
   } catch (err) {
-    // Pass any errors to the error handler middleware
+    console.error('Error adding video:', err.message);
     next(err);
   }
 };
-
 
 
 export const updateVideo = async (req, res, next) => {

@@ -8,6 +8,8 @@ import FakeComment from '../models/FakeComment.js'; // Import the FakeComment mo
 import Comment from '../models/Comment.js';
 import Balance from '../models/Balance.js';
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import { decrypt } from './bycripting_algorithem.js';
+import { createNotificationsForSubscribersOrFollowers } from './notification.js'; // مثال
 
 
 
@@ -20,85 +22,133 @@ const getRandomUsers = async (count) => {
 
 
 // Function to increment likes for a post
+
+
+
+
+
 export const incrementLikes = async (req, res) => {
   try {
-      const { objectId, amount } = req.body;
-
-      // Find the post and video separately
-      const post = await Post.findById(objectId);
-      const video = await Video.findById(objectId);
-      const userId = req.user.id;
-
-
-
-      // Check if user has enough coins to buy likes
-      const userBalance = await Balance.findOne({ user: userId });
-      if (!userBalance || userBalance.currentCoins < amount * 12) {
-        throw new Error('Insufficient balance to buy likes');
-      }
-      // Check if either post or video exists
-      if (post) {
-          const likesCount = parseInt(amount);
-          if (isNaN(likesCount) || likesCount <= 0) {
-              throw new Error('Amount must be a positive integer');
-          }
-          const randomUsers = await getRandomUsers(likesCount);
-          post.likes.push(...randomUsers);
-          await post.save();
-          await deductCoins(req.user.id, amount * 12); // Deduct coins after incrementing likes
-
-          res.status(200).json({ success: true, message: 'Likes incremented successfully.', object: post });
-      } else if (video) {
-          const likesCount = parseInt(amount);
-          if (isNaN(likesCount) || likesCount <= 0) {
-              throw new Error('Amount must be a positive integer');
-          }
-          const randomUsers = await getRandomUsers(likesCount);
-          video.likes.push(...randomUsers);
-          await video.save();
-          await deductCoins(req.user.id, amount * 12); // Deduct coins after incrementing likes
-
-          res.status(200).json({ success: true, message: 'Likes incremented successfully.', object: video });
-      } else {
-          throw new Error('Object not found');
-      }
-  } catch (error) {
-      console.error('Error incrementing likes:', error);
-      res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
-  }
-};
-
-  
-
-// Function to increment views for a video
-export const incrementViews = async (req, res) => {
-  try {
-    const { objectId, amount } = req.body;
-    const video = await Video.findById(objectId);
+    const { postKey, amount } = req.body;
     const userId = req.user.id;
 
+    // فصل النص المشفر واسم التطبيق
+    const [encryptedData, iv, appName] = postKey.split('-');
+    console.log('Encrypted Data:', encryptedData);
+    console.log('IV:', iv);
+    console.log('App Name:', appName);
 
-
-    // Check if user has enough coins to buy likes
-    const userBalance = await Balance.findOne({ user: userId });
-    if (!userBalance || userBalance.currentCoins < amount * 12) {
-      throw new Error('Insufficient balance to buy likes');
+    if (!encryptedData || !iv || appName !== 'Social_Hub') {
+      return res.status(400).json({ success: false, message: 'Invalid postKey format' });
     }
 
+    // فك تشفير postKey للحصول على uniqueIdentifier
+    const uniqueIdentifier = decrypt(`${encryptedData}-${iv}`);
+    console.log('Decrypted uniqueIdentifier:', uniqueIdentifier);
 
+    // البحث عن المنشور باستخدام uniqueIdentifier
+    const matchedPost = await Post.findOne({ postKey });
+    if (!matchedPost) {
+      return res.status(404).json({ success: false, message: 'Post not found for the provided postKey' });
+    }
 
-    if (!video) throw new Error('Video not found');
+    // التحقق من الرصيد
+    const userBalance = await Balance.findOne({ userId });
+    const costPerLike = 10; // تكلفة كل إعجاب
+    const totalCost = amount * costPerLike;
 
-    video.views += amount; // Increment views by 'amount'
-    await video.save();
-    await deductCoins(req.user.id, amount * 8); // Deduct coins after incrementing likes
+    if (!userBalance || userBalance.currentCoins < totalCost) {
+      return res.status(400).json({ success: false, message: 'Insufficient balance to buy likes' });
+    }
 
-    res.status(200).json({ success: true, message: 'Views incremented successfully.', video });
+    // خصم الرصيد
+    userBalance.currentCoins -= totalCost;
+    await userBalance.save();
+
+    // الحصول على مستخدمين عشوائيين
+    const randomUsers = await getRandomUsers(amount);
+
+    // إضافة الإعجابات
+    matchedPost.likes.push(...randomUsers);
+    await matchedPost.save();
+
+    // إنشاء الإشعارات
+    const message = `Post liked by random users. Added ${amount} likes.`;
+    await createNotificationsForSubscribersOrFollowers(matchedPost.userId, message);
+
+    // تحديث سجل النشاط
+    await addHistory(userId, `You added ${amount} likes to post with ID: ${matchedPost._id}`);
+
+    res.status(200).json({
+      success: true,
+      message: 'Likes incremented successfully',
+      post: matchedPost,
+      remainingCoins: userBalance.currentCoins,
+    });
   } catch (error) {
-    console.error('Error incrementing video views:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    console.error('Error incrementing likes:', error.message);
+    res.status(500).json({ success: false, message: 'Internal Server Error' });
   }
 };
+
+
+
+
+
+
+   
+     
+
+export const incrementViews = async (req, res) => {
+  try {
+    const { videoKey, amount } = req.body;
+    const userId = req.user.id;
+
+    // فصل النص المشفر واسم التطبيق
+    const [encryptedData, iv, appName] = videoKey.split('-');
+    if (!encryptedData || !iv || appName !== 'Social_Hub') {
+      return res.status(400).json({ success: false, message: 'Invalid videoKey format' });
+    }
+
+    // فك تشفير videoKey للحصول على uniqueIdentifier
+    const uniqueIdentifier = decrypt(`${encryptedData}-${iv}`);
+    console.log('Decrypted uniqueIdentifier:', uniqueIdentifier);
+
+    // البحث عن الفيديو باستخدام videoKey
+    const video = await Video.findOne({ videoKey });
+    if (!video) {
+      return res.status(404).json({ success: false, message: 'Video not found' });
+    }
+
+    // التحقق من الرصيد
+    const userBalance = await Balance.findOne({ user: userId });
+    const costPerView = 5; // تكلفة كل مشاهدة
+    const totalCost = amount * costPerView;
+
+    if (!userBalance || userBalance.currentCoins < totalCost) {
+      return res.status(400).json({ success: false, message: 'Insufficient balance to buy views' });
+    }
+
+    // خصم الرصيد
+    userBalance.currentCoins -= totalCost;
+    await userBalance.save();
+
+    // زيادة عدد المشاهدات
+    video.views += amount;
+    await video.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Views incremented successfully.',
+      video,
+      remainingCoins: userBalance.currentCoins,
+    });
+  } catch (error) {
+    console.error('Error incrementing views:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 
 
 
@@ -112,84 +162,97 @@ export const incrementViews = async (req, res) => {
 
 const getFakeComments = async (count) => {
   try {
-      // Fetch fake comments from the FakeComment model
-      const fakeComments = await FakeComment.aggregate([{ $sample: { size: count } }]);
-      return fakeComments;
+    const fakeComments = await FakeComment.aggregate([{ $sample: { size: count } }]);
+    return fakeComments;
   } catch (error) {
-      console.error('Error fetching fake comments:', error);
-      throw error;
+    throw new Error('Error fetching fake comments');
   }
 };
 
 
 
-// Function to increment comments for a post or video
+
+
+
+
+
 export const incrementComments = async (req, res) => {
   try {
-    const { objectId, amount } = req.body;
-
-    // Determine if the object is a post or video based on its ID
-    const post = await Post.findById(objectId);
-    const video = await Video.findById(objectId);
+    const { objectKey, amount } = req.body;
     const userId = req.user.id;
 
-
-
-    // Check if user has enough coins to buy likes
-    const userBalance = await Balance.findOne({ user: userId });
-    if (!userBalance || userBalance.currentCoins < amount * 12) {
-      throw new Error('Insufficient balance to buy likes');
+    // تحقق من وجود وصيغة objectKey
+    if (!objectKey || !objectKey.includes('-')) {
+      return res.status(400).json({ success: false, message: 'Invalid objectKey format' });
     }
 
-
-
-
-
-    let object;
-    if (post) {
-      object = post;
-    } else if (video) {
-      object = video;
-    } else {
-      throw new Error('Object not found');
+    // فصل النص المشفر واسم التطبيق
+    const [encryptedData, iv, appName] = objectKey.split('-');
+    if (!encryptedData || !iv || appName !== 'Social_Hub') {
+      return res.status(400).json({ success: false, message: 'Invalid objectKey format' });
     }
 
-    // Validate the amount parameter
-    const parsedAmount = parseInt(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      throw new Error('Amount must be a positive integer');
+    // فك تشفير objectKey للحصول على uniqueIdentifier
+    const uniqueIdentifier = decrypt(`${encryptedData}-${iv}`);
+    console.log('Decrypted uniqueIdentifier:', uniqueIdentifier);
+
+    // البحث عن المنشور أو الفيديو باستخدام objectKey
+    const post = await Post.findOne({ postKey: objectKey });
+    const video = await Video.findOne({ videoKey: objectKey });
+    const object = post || video;
+
+    if (!object) {
+      return res.status(404).json({ success: false, message: 'Object not found' });
     }
 
-    // Get fake comments from the FakeComment model
-    const fakeComments = await getFakeComments(parsedAmount);
-
-    // Ensure the object has a comments property
+    // التأكد من أن حقل comments موجود
     if (!object.comments) {
       object.comments = [];
     }
 
-    // Map fake comments to new Comment documents and push them to the object
+    // التحقق من الرصيد
+    const userBalance = await Balance.findOne({ user: userId });
+    const costPerComment = 8; // تكلفة كل تعليق
+    const totalCost = amount * costPerComment;
+
+    if (!userBalance || userBalance.currentCoins < totalCost) {
+      return res.status(400).json({ success: false, message: 'Insufficient balance to buy comments' });
+    }
+
+    // خصم الرصيد
+    userBalance.currentCoins -= totalCost;
+    await userBalance.save();
+
+    // إنشاء التعليقات المزيفة
+    const fakeComments = await getFakeComments(amount);
     const newComments = [];
+
     for (const fakeComment of fakeComments) {
       const newComment = new Comment({
         userId: fakeComment.userId,
-        objectId: objectId,
-        desc: fakeComment.desc // Use 'desc' from fake comment instead of 'content'
+        objectId: object._id,
+        desc: fakeComment.desc,
       });
       await newComment.save();
-      object.comments.push(newComment._id);
+      object.comments.push(newComment._id); // لن تحدث مشكلة هنا بعد التحقق
       newComments.push(newComment);
     }
 
     await object.save();
-    await deductCoins(req.user.id, amount * 8); // Deduct coins after incrementing likes
 
-    res.status(200).json({ success: true, message: 'Comments incremented successfully.', object, newComments });
+    res.status(200).json({
+      success: true,
+      message: 'Comments incremented successfully.',
+      object,
+      newComments,
+      remainingCoins: userBalance.currentCoins,
+    });
   } catch (error) {
-    console.error('Error incrementing comments:', error);
-    res.status(500).json({ success: false, message: error.message || 'Internal Server Error' });
+    console.error('Error incrementing comments:', error.message);
+    res.status(500).json({ success: false, message: error.message });
   }
 };
+
 
 
 

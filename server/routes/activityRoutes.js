@@ -5,12 +5,12 @@ import { verifyToken } from '../verifyToken.js';
 const router = express.Router();
 
 // Increment likes
-router.put('/likes', verifyToken, incrementLikes);
+router.put('/icrementlikes', verifyToken, incrementLikes);
 
 // Increment comments
-router.put('/comments', verifyToken, incrementComments);
+router.put('/icrementcomments', verifyToken, incrementComments);
 
 // Increment views
-router.put('/views', verifyToken, incrementViews);
+router.put('/icrementviews', verifyToken, incrementViews);
 
 export default router;

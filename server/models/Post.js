@@ -35,6 +35,11 @@ const postSchema = new Schema({
     type: [String],
     default: [],
   },
+  postKey: {
+    type: String,
+    required: true,
+    unique: true, // Ensure no duplicate keys
+  }, 
 },
 { timestamps: true }
 );

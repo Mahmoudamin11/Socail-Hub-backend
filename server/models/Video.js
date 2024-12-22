@@ -39,6 +39,11 @@ const videoSchema = new mongoose.Schema({
         type: [String],
         default: [],
     },
+    videoKey: {
+        type: String,
+        required: true,
+        unique: true, // Ensure no duplicate keys
+      },
 }, { timestamps: true });
 
 

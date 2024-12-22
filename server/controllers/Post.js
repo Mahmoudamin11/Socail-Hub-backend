@@ -4,33 +4,53 @@ import User from "../models/User.js";
 import { createNotificationsForSubscribersOrFollowers } from '../controllers/notification.js';
 import { createNotificationForOwner } from './notification.js'; // Assuming you have the notification functions in a separate file
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import crypto from 'crypto'; // For generating unique keys
+import { encrypt } from './bycripting_algorithem.js'; // استدعاء ملف التشفير
+
+import mongoose from 'mongoose';
+
+import bcrypt from 'bcrypt';
+
+
+
 
 
 export const addPost = async (req, res, next) => {
   try {
-    // Find the user by ID to retrieve their name
+    // العثور على المستخدم
     const user = await User.findById(req.user.id);
     if (!user) {
       return next(createError(404, "User not found"));
     }
 
-    // Create a new post
-    const newPost = new Post({ userId: req.user.id, ...req.body });
+    // إنشاء النص الأساسي لتشفير postKey
+    const uniqueIdentifier = `${req.user.id}-${Date.now()}`;
+    const appName = "Social_Hub";
+
+    // تشفير postKey
+    const encryptedPostKey = `${encrypt(uniqueIdentifier)}-${appName}`;
+
+    // إنشاء المنشور
+    const newPost = new Post({
+      userId: req.user.id,
+      postKey: encryptedPostKey,
+      ...req.body,
+    });
     const savedPost = await newPost.save();
 
-    // Create a notification message with the user's name
+    // إنشاء الإشعارات
     const message = `New post added by ("${user.name}")`;
-
-    // Create notifications for subscribers or followers
     await createNotificationsForSubscribersOrFollowers(req.user.id, message);
-    await addHistory(req.user.id, `You Added (Post)"`);
+    await addHistory(req.user.id, `You Added (Post)`);
 
     res.status(200).json(savedPost);
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error('Error adding post:', error.message);
+    next(error);
   }
-
 };
+
+
 
 
 export const updatePost = async (req, res, next) => {
