@@ -9,6 +9,7 @@ import { addCoins } from './balance.js'; // Assuming you have the notification f
 import { createSystemNotificationForUser } from '../controllers/notification.js';
 import { deductCoinsNew } from '../controllers/balance.js'; // Adjust the path accordingly
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import mongoose from 'mongoose';
 
 import { getBalance } from './balance.js';
 
@@ -620,7 +621,21 @@ const isUserBlocked = async (senderId, receiverId) => {
   }
 };
 
-import mongoose from 'mongoose';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 export const getRandomUsers = async (req, res, next) => {
@@ -692,6 +707,11 @@ export const getRandomUsers = async (req, res, next) => {
     next(err);
   }
 };
+
+
+
+
+
 
 
 
