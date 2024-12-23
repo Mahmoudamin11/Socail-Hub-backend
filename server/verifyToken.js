@@ -10,16 +10,19 @@ export const verifyToken = (req, res, next) => {
     if (err) {
       // Check if the error is due to token expiration
       if (err.name === "TokenExpiredError") {
+        console.error("Access token has expired:", err);
         return res.status(401).json({
           message: "Access token expired. Please refresh your token.",
           code: "TOKEN_EXPIRED",
         });
       }
 
+      console.error("Token verification failed:", err);
       return next(createError(403, "Token is not valid!"));
     }
 
     req.user = user;
+    console.log("Token verified successfully for user:", user);
     next();
   });
 };

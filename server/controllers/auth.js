@@ -101,6 +101,56 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
+
+
+
+
+
+
+// Function to refresh access token
+export const refreshAccessToken = async (req, res, next) => {
+  try {
+    const refreshToken = req.cookies.refresh_token;
+
+    if (!refreshToken) {
+      return res.status(401).json({ success: false, message: "Refresh token is missing!" });
+    }
+
+    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+      if (err) {
+        return res.status(403).json({ success: false, message: "Invalid or expired refresh token!" });
+      }
+
+      const user = await User.findById(decoded.id);
+      if (!user || user.refreshToken !== refreshToken) {
+        return res.status(403).json({ success: false, message: "Refresh token is invalid!" });
+      }
+
+      const newAccessToken = jwt.sign(
+        { id: user._id, name: user.name },
+        process.env.JWT_SECRET,
+        { expiresIn: "1m" } // Reduced expiration time for testing
+      );
+
+      res.cookie("access_token", newAccessToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "Strict",
+        maxAge: 1 * 60 * 1000, // Match access token expiration time (1 minute)
+      });
+
+      res.status(200).json({
+        success: true,
+        message: "Access token refreshed successfully!",
+        accessToken: newAccessToken,
+      });
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Function to handle user sign-in
 export const signin = async (req, res, next) => {
   try {
     const { name, password } = req.body;
@@ -137,22 +187,41 @@ export const signin = async (req, res, next) => {
     }
 
     // Step 4: Generate tokens
-    const accessToken = jwt.sign({ id: user._id, name: user.name }, process.env.JWT_SECRET, { expiresIn: "1h" });
-    const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: "7d" });
+    const accessToken = jwt.sign(
+      { id: user._id, name: user.name },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" } // Updated expiration time for access token
+    );
+    const refreshToken = jwt.sign(
+      { id: user._id },
+      process.env.JWT_REFRESH_SECRET,
+      { expiresIn: "7d" }
+    );
 
+    // Save refresh token to database
     user.refreshToken = refreshToken;
     await user.save();
 
-    res.cookie("access_token", accessToken, { httpOnly: true, secure: true, sameSite: "Strict" });
-    res.cookie("refresh_token", refreshToken, { httpOnly: true, secure: true, sameSite: "Strict" });
+    // Set tokens in cookies
+    res.cookie("access_token", accessToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+      maxAge: 15 * 60 * 1000, // Match access token expiration time
+    });
+
+    res.cookie("refresh_token", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "Strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // Match refresh token expiration time
+    });
 
     const { password: _, refreshToken: __, ...userData } = user._doc;
 
     res.status(200).json({
       success: true,
       message: "Login successful!",
-      accessToken,
-      refreshToken,
       user: userData,
       balance: userBalance.currentCoins, // Return the user's updated balance
     });
@@ -160,6 +229,7 @@ export const signin = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 

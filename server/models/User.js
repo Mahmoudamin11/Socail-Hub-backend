@@ -19,6 +19,8 @@ const UserSchema = new mongoose.Schema(
       required: true,
       min: 6,
     },
+    refreshToken: { type: String }, // Ensure this field exists
+
     tempOTP: { // حقل لتخزين رمز OTP
       type: String,
     },
