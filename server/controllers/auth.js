@@ -159,7 +159,7 @@ const updateAccessTokens = async () => {
 };
 
 // جدولة المهمة لتعمل كل 8 ثوانٍ
-cron.schedule("*/14 * * * *", async () => {
+cron.schedule("*/15 * * * *", async () => {
   console.log("Updating access tokens...");
   await updateAccessTokens();
   console.log("Access tokens update complete.");

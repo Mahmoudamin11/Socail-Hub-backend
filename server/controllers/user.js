@@ -333,63 +333,70 @@ export const dislikeOnVideo = async (req, res, next) => {
 };
 
 
-
-
-
 export const sendFriendRequest = async (req, res, next) => {
   try {
-    const senderId = req.user.id;
-    const receiverId = req.params.receiverId;
+    const senderId = req.user.id; // معرف المرسل
+    const receiverId = req.params.receiverId; // معرف المستلم
 
-    // Check if the sender and receiver are different users
+    // تحقق من أن المرسل والمستلم ليسا نفس الشخص
     if (senderId === receiverId) {
       return res.status(400).json("You cannot send a friend request to yourself.");
     }
 
-
-
-    
-    // Check if the receiver is blocked by the sender
+    // تحقق مما إذا كان المستلم محظورًا من قبل المرسل
     const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
-
     if (isReceiverBlocked) {
-      return res.status(403).json({ success: false, message: 'Cannot send messages to blocked users' });
+      return res.status(403).json({ success: false, message: "Cannot send messages to blocked users" });
     }
 
+    // جلب بيانات المستلم
     const receiver = await User.findById(receiverId);
     if (!receiver) {
       return res.status(404).json("Receiver not found.");
     }
 
-    // Check if the receiver is already a friend
+    // تحقق مما إذا كان المستلم صديقًا بالفعل
     if (receiver.friends.includes(senderId)) {
       return res.status(400).json("User is already your friend.");
     }
 
-    // Check if the friend request has already been sent
+    // تحقق مما إذا كانت الدعوة قد أُرسلت بالفعل
     if (receiver.friendRequests.some(request => request.sender.toString() === senderId)) {
       return res.status(400).json("Friend request already sent.");
     }
 
-    // Add friend request to receiver's profile
-    receiver.friendRequests.push({ sender: senderId });
+    // جلب بيانات المرسل
+    const senderUser = await User.findById(senderId);
+    if (!senderUser) {
+      return res.status(404).json("Sender not found.");
+    }
+
+    // إضافة طلب الصداقة إلى قائمة طلبات المستلم مع بيانات المرسل
+    receiver.friendRequests.push({
+      sender: senderId,
+      senderName: senderUser.name, // تخزين اسم المرسل
+      senderImg: senderUser.profilePicture || "", // تخزين صورة الملف الشخصي للمرسل
+    });
+
     await receiver.save();
 
-    // Notify the receiver about the friend request
-    const senderUser = await User.findById(senderId);
+    // إرسال إشعار للمستلم
     const notificationMessage = `${senderUser.name} sent you a friend request.`;
     await createNotificationForOwner(senderId, receiverId, notificationMessage);
-    await addHistory(req.user.id, `You Send Frind Request To : ${receiver.name}" `);
 
-    res.status(200).json("Friend request sent successfully.");
+    // إضافة السجل للمرسل
+    await addHistory(req.user.id, `You sent a friend request to: ${receiver.name}.`);
+
+    // الاستجابة بالنجاح
+    res.status(200).json({
+      success: true,
+      message: "Friend request sent successfully.",
+      friendRequests: receiver.friendRequests, // عرض طلبات الصداقة
+    });
   } catch (err) {
     next(err);
   }
 };
-
-
-
-
 
 
 

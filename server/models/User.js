@@ -78,11 +78,21 @@ const UserSchema = new mongoose.Schema(
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
         },
+        senderName: { // اسم المرسل
+          type: String,
+          default: "", // تأكد من أن الحقل مطلوب
+        },
+        senderImg: { // صورة المرسل
+          type: String,
+          default: "", // قيمة افتراضية
+        },
         accepted: {
           type: Boolean,
           default: false,
         },
       },
+    
+    
     ],
 
     communities: [
