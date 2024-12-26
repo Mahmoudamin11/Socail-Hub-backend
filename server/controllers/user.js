@@ -765,3 +765,34 @@ export const advancedUserSearch = async (req, res, next) => {
 };
 
 
+
+
+
+
+
+export const getAllSavedItems = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // Extract user ID from token
+
+    // Fetch the user and their saved videos and posts
+    const user = await User.findById(userId).select("savedVideos savedPosts");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Fetch saved videos and posts from their respective models
+    const savedVideos = await Video.find({ _id: { $in: user.savedVideos } }).select("title createdAt");
+    const savedPosts = await Post.find({ _id: { $in: user.savedPosts } }).select("title createdAt");
+
+    // Combine the results into a single array and sort by time (createdAt)
+    const allItems = [...savedVideos, ...savedPosts].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    );
+
+    // Return the sorted list
+    res.status(200).json({ success: true, items: allItems });
+  } catch (err) {
+    console.error("Error fetching saved items:", err);
+    next(err);
+  }
+};

@@ -15,6 +15,7 @@ import express from "express";
 import { sendOTPEmail } from "./OTP.js"; // استيراد وظيفة إرسال البريد
 import SibApiV3Sdk from "sib-api-v3-sdk";
 import session from "express-session";
+import cron from "node-cron";
 
 dotenv.config();
 
@@ -107,48 +108,45 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
-// Function to refresh access token
-export const refreshAccessToken = async (req, res, next) => {
+
+// وظيفة لتحديث رمز الوصول لجميع المستخدمين تلقائيًا
+const updateAccessTokens = async () => {
   try {
-    const refreshToken = req.cookies.refresh_token;
+    // جلب جميع المستخدمين الذين لديهم رمز تحديث
+    const users = await User.find({ refreshToken: { $exists: true, $ne: null } });
 
-    if (!refreshToken) {
-      return res.status(401).json({ success: false, message: "Refresh token is missing!" });
+    for (const user of users) {
+      // التحقق من صلاحية رمز التحديث
+      jwt.verify(user.refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+        if (err) {
+          console.error(`Error verifying refresh token for user: ${user.name}`);
+          return;
+        }
+
+        // إنشاء رمز وصول جديد
+        const newAccessToken = jwt.sign(
+          { id: user._id, name: user.name },
+          process.env.JWT_SECRET,
+          { expiresIn: "15m" }
+        );
+
+        // يمكنك هنا تخزين رمز الوصول الجديد في قاعدة البيانات إذا كنت بحاجة لذلك
+        console.log(`  User access token updated:  : ${user.name}`);
+
+        // (اختياري) إرسال رمز الوصول للمستخدم عبر إشعار أو قناة أخرى
+      });
     }
-
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
-      if (err) {
-        return res.status(403).json({ success: false, message: "Invalid or expired refresh token!" });
-      }
-
-      const user = await User.findById(decoded.id);
-      if (!user || user.refreshToken !== refreshToken) {
-        return res.status(403).json({ success: false, message: "Refresh token is invalid!" });
-      }
-
-      const newAccessToken = jwt.sign(
-        { id: user._id, name: user.name },
-        process.env.JWT_SECRET,
-        { expiresIn: "1m" } // Reduced expiration time for testing
-      );
-
-      res.cookie("access_token", newAccessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: "Strict",
-        maxAge: 1 * 60 * 1000, // Match access token expiration time (1 minute)
-      });
-
-      res.status(200).json({
-        success: true,
-        message: "Access token refreshed successfully!",
-        accessToken: newAccessToken,
-      });
-    });
   } catch (err) {
-    next(err);
+    console.error("Error updating symbols:", err);
   }
 };
+
+// جدولة المهمة لتعمل كل 15 دقيقة
+cron.schedule("*/14 * * * *", async () => {
+  console.log("Token is being updated.....");
+  await updateAccessTokens();
+  console.log("Token update is complete......");
+});
 
 // Function to handle user sign-in
 export const signin = async (req, res, next) => {

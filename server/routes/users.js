@@ -13,7 +13,8 @@ import {
   blockUser,
   unblockUser,
   advancedUserSearch,
-  getRandomUsers
+  getRandomUsers,
+  getAllSavedItems
 } from "../controllers/user.js";
 import { verifyToken } from "../verifyToken.js";
 
@@ -48,6 +49,8 @@ router.put("/send-request/:receiverId", verifyToken, sendFriendRequest);
 
 // Accept friend request
 router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
+
+router.get("/saved-items", verifyToken, getAllSavedItems);
 
 
 // Block user route

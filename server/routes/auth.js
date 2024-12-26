@@ -1,5 +1,5 @@
 import express from "express";
-import { googleAuth,refreshAccessToken, signin, signup,sendPasswordOTP,verifyOTPAndResetPassword } from "../controllers/auth.js";
+import { googleAuth, signin, signup,sendPasswordOTP,verifyOTPAndResetPassword } from "../controllers/auth.js";
 import { verifyToken } from "../verifyToken.js";  // Ensure you only import once
 
 const router = express.Router();
@@ -12,7 +12,6 @@ router.post("/signin", signin);
 
 // GOOGLE AUTH (No token required)
 router.post("/google", googleAuth);
-router.post("/token/refresh",verifyToken ,refreshAccessToken)
 // SEND PASSCODE (No token required)
 router.post("/send-password-otp", sendPasswordOTP);
 
