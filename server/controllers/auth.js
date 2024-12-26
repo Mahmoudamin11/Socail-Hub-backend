@@ -142,7 +142,7 @@ const updateAccessTokens = async () => {
           const newAccessToken = jwt.sign(
             { id: user._id, name: user.name },
             process.env.JWT_SECRET,
-            { expiresIn: "15s" } // صلاحية التوكن 15 ثانية
+            { expiresIn: "15m" } // صلاحية التوكن 15 ثانية
           );
 
           // تحديث Access Token في قاعدة البيانات
@@ -159,7 +159,7 @@ const updateAccessTokens = async () => {
 };
 
 // جدولة المهمة لتعمل كل 8 ثوانٍ
-cron.schedule("*/80 * * * * *", async () => {
+cron.schedule("*/14 * * * *", async () => {
   console.log("Updating access tokens...");
   await updateAccessTokens();
   console.log("Access tokens update complete.");
@@ -209,7 +209,7 @@ export const signin = async (req, res, next) => {
     const accessToken = jwt.sign(
       { id: user._id, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: "10s" } // Updated expiration time for access token
+      { expiresIn: "15m" } // Updated expiration time for access token
     );
     const refreshToken = jwt.sign(
       { id: user._id },

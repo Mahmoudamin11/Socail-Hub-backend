@@ -33,7 +33,7 @@ export const verifyToken = async (req, res, next) => {
       const newAccessToken = jwt.sign(
         { id: decoded.id, name: decoded.name },
         process.env.JWT_SECRET,
-        { expiresIn: "15s" } // صلاحية التوكن الجديد
+        { expiresIn: "15m" } // صلاحية التوكن الجديد
       );
 
       // تحديث Access Token في الكوكيز
@@ -41,7 +41,7 @@ export const verifyToken = async (req, res, next) => {
         httpOnly: true,
         secure: true,
         sameSite: "Strict",
-        maxAge: 15 * 1000, // 15 ثانية
+        maxAge: 15*60 * 1000, // 15 min
       });
 
       console.log("New access token issued for user:", decoded.name);
@@ -80,7 +80,7 @@ export const verifyToken = async (req, res, next) => {
             const newAccessToken = jwt.sign(
               { id: decoded.id, name: decoded.name },
               process.env.JWT_SECRET,
-              { expiresIn: "15s" } // صلاحية التوكن الجديد
+              { expiresIn: "15m" } // صلاحية التوكن الجديد
             );
 
             // تحديث Access Token في الكوكيز
@@ -88,7 +88,7 @@ export const verifyToken = async (req, res, next) => {
               httpOnly: true,
               secure: true,
               sameSite: "Strict",
-              maxAge: 15 * 1000, // 15 ثانية
+              maxAge: 15 * 60 * 1000, // 15 ثانية
             });
 
             console.log("New access token issued for user:", decoded.name);
