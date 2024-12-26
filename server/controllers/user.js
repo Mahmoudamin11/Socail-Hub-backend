@@ -387,6 +387,17 @@ export const sendFriendRequest = async (req, res, next) => {
   }
 };
 
+
+
+
+
+
+
+
+
+
+
+
 export const acceptFriendRequest = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -432,6 +443,53 @@ export const acceptFriendRequest = async (req, res, next) => {
     next(err);
   }
 };
+
+
+
+export const rejectFriendRequest = async (req, res, next) => {
+  try {
+    const userId = req.user.id; // المستخدم الحالي
+    const senderId = req.params.senderId; // معرف المستخدم الذي أرسل الطلب
+
+    // التحقق من أن المستخدم الحالي ليس نفس الشخص الذي أرسل الطلب
+    if (userId === senderId) {
+      return res.status(400).json("You cannot reject a friend request from yourself.");
+    }
+
+    // العثور على المستخدم الحالي
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json("User not found.");
+    }
+
+    // التحقق من وجود طلب الصداقة
+    const friendRequest = user.friendRequests.find(request => request.sender.toString() === senderId);
+    if (!friendRequest) {
+      return res.status(404).json("Friend request not found.");
+    }
+
+    // إزالة طلب الصداقة
+    user.friendRequests = user.friendRequests.filter(request => request.sender.toString() !== senderId);
+
+    // حفظ التغييرات
+    await user.save();
+
+    // إرسال إشعار للمستخدم الذي تم رفض طلبه
+    const senderUser = await User.findById(senderId);
+    const notificationMessage = `${user.name} has rejected your friend request.`;
+    await createNotificationForOwner(userId, senderId, notificationMessage);
+
+    // تسجيل النشاط
+    await addHistory(req.user.id, `You Rejected Frind Request From : ${senderUser.name}" `);
+
+    res.status(200).json("Friend request rejected successfully.");
+  } catch (err) {
+    next(err);
+  }
+};
+
+
+
 
 
 

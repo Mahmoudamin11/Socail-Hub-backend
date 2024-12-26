@@ -14,7 +14,8 @@ import {
   unblockUser,
   advancedUserSearch,
   getRandomUsers,
-  getAllSavedItems
+  getAllSavedItems,
+  rejectFriendRequest
 } from "../controllers/user.js";
 import { verifyToken } from "../verifyToken.js";
 
@@ -49,6 +50,7 @@ router.put("/send-request/:receiverId", verifyToken, sendFriendRequest);
 
 // Accept friend request
 router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
+router.delete("/reject-request/:senderId",verifyToken, rejectFriendRequest);
 
 router.get("/saved-items", verifyToken, getAllSavedItems);
 

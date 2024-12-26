@@ -107,45 +107,66 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
-
 const updateAccessTokens = async () => {
   try {
-    // جلب جميع المستخدمين الذين لديهم رمز تحديث
+    // جلب جميع المستخدمين الذين لديهم Refresh Token
     const users = await User.find({ refreshToken: { $exists: true, $ne: null } });
 
     for (const user of users) {
-      // التحقق من صلاحية رمز التحديث
-      jwt.verify(user.refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
-        if (err) {
-          console.error(`Error verifying refresh token for user: ${user.name}`);
-          return;
+      try {
+        if (!user.accessToken) {
+          throw new Error("Access token not provided");
         }
 
-        // إنشاء رمز وصول جديد
-        const newAccessToken = jwt.sign(
-          { id: user._id, name: user.name },
-          process.env.JWT_SECRET,
-          { expiresIn: "15m" } // رمز الوصول صالح لمدة 15 دقيقة
-        );
+        // التحقق من صحة Access Token
+        jwt.verify(user.accessToken, process.env.JWT_SECRET, (err, decoded) => {
+          if (err && err.name === "TokenExpiredError") {
+            console.log(`Access token expired for user: ${user.name}`);
+            throw new Error("Access token expired");
+          } else if (err) {
+            console.error(`Error verifying access token for user ${user.name}: ${err.message}`);
+            throw new Error("Invalid access token");
+          }
+        });
+      } catch (err) {
+        console.log(`Updating access token for user: ${user.name}`);
 
-        // تخزين رمز الوصول الجديد في قاعدة بيانات المستخدم
-        user.accessToken = newAccessToken;
-        await user.save();
+        // التحقق من صحة Refresh Token
+        jwt.verify(user.refreshToken, process.env.JWT_REFRESH_SECRET, async (refreshErr, decoded) => {
+          if (refreshErr) {
+            console.error(`Invalid refresh token for user: ${user.name}`);
+            return;
+          }
 
-        console.log(`Access token updated for user: ${user.name}`);
-      });
+          // إنشاء Access Token جديد
+          const newAccessToken = jwt.sign(
+            { id: user._id, name: user.name },
+            process.env.JWT_SECRET,
+            { expiresIn: "15s" } // صلاحية التوكن 15 ثانية
+          );
+
+          // تحديث Access Token في قاعدة البيانات
+          user.accessToken = newAccessToken;
+          await user.save();
+
+          console.log(`Access token updated for user: ${user.name}`);
+        });
+      }
     }
   } catch (err) {
-    console.error("Error updating access tokens:", err);
+    console.error("Error updating access tokens:", err.message);
   }
 };
 
-// جدولة المهمة لتعمل كل 15 دقيقة
-cron.schedule("*/14 * * * *", async () => {
+// جدولة المهمة لتعمل كل 8 ثوانٍ
+cron.schedule("*/80 * * * * *", async () => {
   console.log("Updating access tokens...");
   await updateAccessTokens();
   console.log("Access tokens update complete.");
 });
+
+export default updateAccessTokens;
+
 
 
 // Function to handle user sign-in
@@ -188,7 +209,7 @@ export const signin = async (req, res, next) => {
     const accessToken = jwt.sign(
       { id: user._id, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" } // Updated expiration time for access token
+      { expiresIn: "10s" } // Updated expiration time for access token
     );
     const refreshToken = jwt.sign(
       { id: user._id },
