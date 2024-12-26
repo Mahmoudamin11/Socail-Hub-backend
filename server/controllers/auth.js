@@ -232,6 +232,9 @@ export const signin = async (req, res, next) => {
 
 
 
+
+
+
 export const signup = async (req, res, next) => {
   try {
     const { email, name, password, otp } = req.body;
