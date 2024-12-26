@@ -1,4 +1,3 @@
-// models/Video.js
 import mongoose from 'mongoose';
 
 const videoSchema = new mongoose.Schema({
@@ -43,10 +42,14 @@ const videoSchema = new mongoose.Schema({
         type: String,
         required: true,
         unique: true, // Ensure no duplicate keys
-      },
+    },
+    comments: [{ // إضافة حقل التعليقات
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Comment', // ربط التعليقات بموديل "Comment"
+    }],
 }, { timestamps: true });
-
 
 const Video = mongoose.model('Video', videoSchema);
 
 export default Video;
+

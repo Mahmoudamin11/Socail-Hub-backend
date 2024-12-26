@@ -1,5 +1,5 @@
 import express from 'express';
-import { subscribePremiumPlan ,transferCoins,collectStatisticsAndGrantCoins,getPremiumPlanType} from '../controllers/premiumPlanController.js';
+import { subscribePremiumPlan ,getCurrentUserPlanExpiration,transferCoins,collectStatisticsAndGrantCoins,getPremiumPlanType} from '../controllers/premiumPlanController.js';
 
 import { verifyToken } from "../verifyToken.js";
 
@@ -11,5 +11,6 @@ router.post('/Statistics', verifyToken, collectStatisticsAndGrantCoins);
 router.post('/transfer', verifyToken,transferCoins );
 router.get('/PlanType/:userId', verifyToken, getPremiumPlanType);
 
+router.get('/premium/expiration',verifyToken, getCurrentUserPlanExpiration);
 
 export default router;

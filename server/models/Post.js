@@ -40,6 +40,10 @@ const postSchema = new Schema({
     required: true,
     unique: true, // Ensure no duplicate keys
   }, 
+   comments: [{ // إضافة حقل التعليقات
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Comment', // ربط التعليقات بموديل "Comment"
+      }],
 },
 { timestamps: true }
 );

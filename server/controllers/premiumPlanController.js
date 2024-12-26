@@ -381,3 +381,35 @@ export const transferCoins = async (req, res) => {
     res.status(error.status || 500).json({ success: false, message: error.message || 'Internal Server Error' });
   }
 };
+
+
+
+
+
+export const getCurrentUserPlanExpiration = async (req, res) => {
+  try {
+    const userId = req.user.id; // استخراج معرف المستخدم من الطلب
+
+    // البحث عن الاشتراك الخاص بالمستخدم
+    const userPremiumPlan = await PremiumPlan.findOne({ user: userId });
+
+    if (!userPremiumPlan) {
+      return res.status(404).json({
+        success: false,
+        message: "You are not subscribed to any premium plan.",
+      });
+    }
+
+    // إرجاع تاريخ انتهاء الاشتراك
+    res.status(200).json({
+      success: true,
+      expirationDate: userPremiumPlan.expirationDate,
+    });
+  } catch (error) {
+    console.error("Error retrieving plan expiration date:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Internal Server Error",
+    });
+  }
+};

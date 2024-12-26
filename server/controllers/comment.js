@@ -8,7 +8,6 @@ import { addHistory } from '../controllers/historyController.js'; // Import the 
 
 import { createNotificationForOwner } from './notification.js'; // Assuming you have the notification functions in a separate file
 
-
 export const addComment = async (req, res, next) => {
   const { objectId, desc, replyTo } = req.body;
   const userId = req.user.id;
@@ -16,7 +15,7 @@ export const addComment = async (req, res, next) => {
 
   try {
     let parentComment;
-    let newComment; // Define newComment here
+    let newComment;
 
     // Check if it's a reply and find the parent comment
     if (replyTo) {
@@ -25,33 +24,29 @@ export const addComment = async (req, res, next) => {
         return next(createError(404, 'Parent comment not found'));
       }
 
-      // Define receiverId based on the object being commented on (post or video)
       let receiverId;
       if (parentComment.objectType === 'video') {
         const video = await Video.findById(parentComment.objectId);
         if (video) {
-          receiverId = video.userId; // Set receiverId to the ID of the video owner
+          receiverId = video.userId;
         }
       } else if (parentComment.objectType === 'post') {
         const post = await Post.findById(parentComment.objectId);
         if (post) {
-          receiverId = post.userId; // Set receiverId to the ID of the post owner
+          receiverId = post.userId;
         }
       }
 
-      // Check if the receiver is blocked by the sender
       const isReceiverBlocked = await isUserBlocked(userId, receiverId);
 
       if (isReceiverBlocked) {
         return res.status(403).json({ success: false, message: 'Cannot add comment to blocked users' });
       }
 
-      // If it's a reply, add the comment ID to the replies array of the parent comment
       newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
       parentComment.replies.push(newComment._id);
       await parentComment.save();
 
-      // Notify the owner of the parent comment about the reply
       const parentCommentOwner = await User.findById(parentComment.userId);
       if (parentCommentOwner) {
         const notificationMessage = ` ${userName.name} reply On Your Comment  : "${desc}"`;
@@ -59,66 +54,60 @@ export const addComment = async (req, res, next) => {
       }
     }
 
-    // Check if the objectId is a video
     const video = await Video.findById(objectId);
     if (video) {
       if (!replyTo) {
-        // Only create a newComment if it's not a reply
         newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
         await addHistory(req.user.id, `You Added Reply On : "${video.title} (Video)"`);
-
       }
 
-      // Save the new comment
       const savedComment = await newComment.save();
 
-      // Notify the owner of the commented video
+      video.comments.push(savedComment._id); // ربط التعليق بنموذج الفيديو
+      await video.save();
+
       const notificationMessage = replyTo
-        ? `New Comment : ${desc}   By ${userName.name} `
+        ? `New Comment : ${desc}   By ${userName.name}`
         : `New comment on your video: ${desc}   By ${userName.name}`;
 
       await createNotificationForOwner(userId, video.userId, notificationMessage);
 
-      // Push a copy of the comment to the FakeComment model
-      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined }); // Remove _id to generate new ObjectId
+      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined });
       await fakeComment.save();
 
       return res.status(200).json(savedComment);
     }
 
-    // Check if the objectId is a post
     const post = await Post.findById(objectId);
     if (post) {
       if (!replyTo) {
-        // Only create a newComment if it's not a reply
         newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
         await addHistory(req.user.id, `You Added Comment On : "${post.title} (Post)"`);
-
       }
 
-      // Save the new comment
       const savedComment = await newComment.save();
 
-      // Notify the owner of the commented post
+      post.comments.push(savedComment._id); // ربط التعليق بنموذج المنشورات
+      await post.save();
+
       const notificationMessage = replyTo
         ? `You have a reply on your comment: ${desc}   By ${userName.name}`
         : `New comment on your post: ${desc}   By ${userName.name}`;
 
       await createNotificationForOwner(userId, post.userId, notificationMessage);
 
-      // Push a copy of the comment to the FakeComment model
-      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined }); // Remove _id to generate new ObjectId
+      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined });
       await fakeComment.save();
 
       return res.status(200).json(savedComment);
     }
 
-    // If objectId doesn't match any existing post or video
     return next(createError(404, 'Associated post or video not found'));
   } catch (err) {
     next(err);
   }
 };
+
 
 
 

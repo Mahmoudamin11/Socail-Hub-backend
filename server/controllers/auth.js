@@ -108,8 +108,6 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
-
-// وظيفة لتحديث رمز الوصول لجميع المستخدمين تلقائيًا
 const updateAccessTokens = async () => {
   try {
     // جلب جميع المستخدمين الذين لديهم رمز تحديث
@@ -127,26 +125,28 @@ const updateAccessTokens = async () => {
         const newAccessToken = jwt.sign(
           { id: user._id, name: user.name },
           process.env.JWT_SECRET,
-          { expiresIn: "15m" }
+          { expiresIn: "15m" } // رمز الوصول صالح لمدة 15 دقيقة
         );
 
-        // يمكنك هنا تخزين رمز الوصول الجديد في قاعدة البيانات إذا كنت بحاجة لذلك
-        console.log(`  User access token updated:  : ${user.name}`);
+        // تخزين رمز الوصول الجديد في قاعدة بيانات المستخدم
+        user.accessToken = newAccessToken;
+        await user.save();
 
-        // (اختياري) إرسال رمز الوصول للمستخدم عبر إشعار أو قناة أخرى
+        console.log(`Access token updated for user: ${user.name}`);
       });
     }
   } catch (err) {
-    console.error("Error updating symbols:", err);
+    console.error("Error updating access tokens:", err);
   }
 };
 
 // جدولة المهمة لتعمل كل 15 دقيقة
 cron.schedule("*/14 * * * *", async () => {
-  console.log("Token is being updated.....");
+  console.log("Updating access tokens...");
   await updateAccessTokens();
-  console.log("Token update is complete......");
+  console.log("Access tokens update complete.");
 });
+
 
 // Function to handle user sign-in
 export const signin = async (req, res, next) => {

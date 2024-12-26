@@ -350,7 +350,24 @@ export const copyUrl = async (req, res, next) => {
   }
 };
 
+export const getVideoDetailsById = async (req, res, next) => {
+  try {
+    const videoId = req.params.id;
 
+    const video = await Video.findById(videoId)
+      .populate('userId', 'name email') // جلب معلومات المستخدم المرتبط بالفيديو
+      .populate('comments'); // جلب التعليقات المرتبطة بالفيديو
+
+    if (!video) {
+      return next(createError(404, "Video not found!"));
+    }
+
+    res.status(200).json({ success: true, video });
+  } catch (err) {
+    console.error('Error fetching video details by ID:', err.message);
+    next(err);
+  }
+};
 
 
 
