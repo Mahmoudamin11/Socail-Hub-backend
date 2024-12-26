@@ -34,7 +34,7 @@ console.log("Mongo URI:", process.env.MONGO_URI);
 console.log("Port:", process.env.PORT);
 
 const app = express();
-const PORT = process.env.PORT || 8800;
+const PORT = process.env.PORT;
 
 // Middleware
 app.use(cookieParser());
@@ -43,7 +43,7 @@ app.use(express.static('public'));
 
 // Added session middleware for OTP handling
 app.use(session({
-  secret: process.env.SESSION_SECRET || "your_secret_key", // Use a strong secret key
+  secret: process.env.SESSION_SECRET , // Use a strong secret key
   resave: false,
   saveUninitialized: true,
   cookie: { secure: false, maxAge: 10 * 60 * 1000 } // 10 minutes for OTP expiration
@@ -65,7 +65,13 @@ io.on("connection", (socket) => {
   socket.on("add-user", (userId) => {
     onlineUsers.set(userId, socket.id);
   });
-
+ // Real-Time Notifications
+ socket.on("send-notification", (data) => {
+  const sendUserSocket = onlineUsers.get(data.to);
+  if (sendUserSocket) {
+    socket.to(sendUserSocket).emit("notification-received", data);
+  }
+});
   socket.on("send-msg", (data) => {
     const sendUserSocket = onlineUsers.get(data.to);
     if (sendUserSocket) {
