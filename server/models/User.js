@@ -52,14 +52,24 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    savedVideos: {
-      type: [String],
-      default: [],
-    },
-    savedPosts: {
-      type: [String],
-      default: [],
-    },
+   
+    savedPosts: [
+      {
+        _id: mongoose.Schema.Types.ObjectId, 
+        title: String,                      
+        desc: String,                      
+        imgUrl: String,                     
+        videoUrl: String,                   
+        tags: [String],                     
+        likes: [mongoose.Schema.Types.ObjectId], 
+        dislikes: [mongoose.Schema.Types.ObjectId], 
+        postKey: String,
+
+        createdAt: Date,                    
+        updatedAt: Date,                   
+      },
+    ],
+  
     isAdmin: {
       type: Boolean,
       default: false,
@@ -115,6 +125,23 @@ const UserSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
+
+    savedVideos: [
+      {
+        _id: mongoose.Schema.Types.ObjectId,
+        title: String,
+        description: String,
+        videoUrl: String,
+        thumbnailUrl: String,
+        views: Number,
+        tags: [String],
+        likes: [mongoose.Schema.Types.ObjectId],
+        dislikes: [mongoose.Schema.Types.ObjectId],
+        createdAt: Date,
+        updatedAt: Date,
+      },
+    ],
+
 
     invitations: [
       {

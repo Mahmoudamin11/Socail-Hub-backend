@@ -16,7 +16,7 @@ router.delete("/:id", verifyToken, deleteVideo)
 router.get("/find/:userId", getVideosByUser);
 router.put("/viewMoudel/:id",verifyToken, addView)
 router.get("/trend", trend)
-router.get("/random", random)
+router.get("/random", verifyToken,random)
 router.get("/spicificVideo/:id", getVideoDetailsById);
 
 router.get("/sub",verifyToken, sub)

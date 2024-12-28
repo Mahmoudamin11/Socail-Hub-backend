@@ -252,79 +252,88 @@ export const savePost = async (req, res, next) => {
 
     // Check if user.savedPosts is defined
     if (!user.savedPosts) {
-      console.error('User savedPosts array is undefined');
-      return next(createError(500, 'User saved '));
+      user.savedPosts = []; // Initialize savedPosts array if undefined
     }
 
-    // Check if the Post is already saved
-    if (user.savedPosts.includes(postId)) {
+    // Find the post by ID
+    const post = await Post.findById(postId);
+    if (!post) {
+      return next(createError(404, 'Post not found'));
+    }
+
+    // Check if the post is already saved
+    const alreadySaved = user.savedPosts.find(
+      (savedItem) => savedItem._id.toString() === postId
+    );
+    if (alreadySaved) {
       return res.status(400).json({ success: false, message: 'Post already saved' });
     }
 
-    // Add the Post ID to the user's savedPost array
-    user.savedPosts.push(postId);
+    // Add the post data to the user's savedPosts array
+    user.savedPosts.push({
+      _id: post._id,
+      title: post.title,
+      desc: post.desc,
+      imgUrl: post.imgUrl,
+      videoUrl: post.videoUrl,
+      tags: post.tags,
+      likes: post.likes,
+      postKey: post.postKey,
+      dislikes: post.dislikes,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+    });
+
+    // Save the user document
     await user.save();
 
     // Retrieve the user's name
     const loggedInUserName = user.name;
 
-    // Retrieve the owner's ID from the post
-    const post = await Post.findById(postId);
-    if (!post) {
-      return next(createError(404, 'Post not found'));
-    }
-    const ownerId = post.userId; // Assuming 'userId' field in Post model represents the owner's user ID
-
     // Notify the owner of the post
-    const notificationMessage = `"${loggedInUserName}" saved your post`; // Use the user's name in the message
-    await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
-    await addHistory(req.user.id, `You Saved This Post : ${post.title}`);
+    const notificationMessage = `${loggedInUserName} saved your post`;
+    await createNotificationForOwner(loggedInUserId, post.userId, notificationMessage);
+
+    // Add a history record
+    await addHistory(req.user.id, `You saved a post: ${post.title}`);
 
     res.status(200).json({ success: true, message: 'Post saved successfully' });
   } catch (err) {
+    console.error("Error saving post:", err);
     next(err);
   }
 };
 
 
 
-
 export const unsavePost = async (req, res, next) => {
   try {
-    const loggedInUserId = req.user.id; // Assuming you have the ID of the currently signed-in user
+    const loggedInUserId = req.user.id;
 
     // Find the user by ID
     const user = await User.findById(loggedInUserId);
     if (!user) return next(createError(404, 'User not found!'));
 
-    // Check if Post exists
-    const post = await Post.findById(req.params.id); // Rename this to avoid conflict
-    if (!post) return next(createError(404, 'Post not found!'));
+    // Find the saved post in the user's savedPosts
+    const postIndex = user.savedPosts.findIndex(
+      (savedItem) => savedItem._id.toString() === req.params.id
+    );
 
-    // Check if the Post is saved
-    const isSaved = user.savedPosts.includes(req.params.id);
-    if (!isSaved) return next(createError(400, 'Post is not saved!'));
+    if (postIndex === -1) return next(createError(400, 'Post is not saved!'));
 
-    // Remove the Post from the saved list
-    user.savedPosts = user.savedPosts.filter(id => id !== req.params.id);
+    // Remove the post from savedPosts
+    const removedPost = user.savedPosts.splice(postIndex, 1)[0];
     await user.save();
 
-    // Retrieve the user's name
-    const loggedInUserName = user.name;
-
-    // Retrieve the owner's ID from the post
-    const ownerId = post.userId; // Assuming 'userId' field in Post model represents the owner's user ID
-
-    // Notify the owner of the post
-    const notificationMessage = `${loggedInUserName} unsaved your post`; // Use the user's name in the message
-    await createNotificationForOwner(loggedInUserId, ownerId, notificationMessage);
-    await addHistory(req.user.id, `You Unsaved This Post : ${post.title}`);
+    // Add a history record
+    await addHistory(req.user.id, `You unsaved a post: ${removedPost.title}`);
 
     res.status(200).json({ message: 'Post unsaved successfully.' });
   } catch (err) {
     next(err);
   }
 };
+
 
 
 //...........................??????????

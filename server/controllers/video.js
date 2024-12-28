@@ -174,24 +174,64 @@ export const addView = async (req, res, next) => {
 
 
 
-
 export const random = async (req, res, next) => {
   try {
-    const videos = await Video.aggregate([{ $sample: { size: 40 } }]);
-    res.status(200).json(videos);
+    const page = parseInt(req.query.page) || 1; // Default to page 1 if not provided
+    const limit = 12; // Number of videos per page
+
+    // Calculate the number of videos to skip
+    const skip = (page - 1) * limit;
+
+    const videos = await Video.aggregate([
+      { $sample: { size: 1000 } }, // Randomly sample a large number of videos
+      { $skip: skip },
+      { $limit: limit },
+    ]);
+
+    if (!videos.length) {
+      return res.status(404).json({ success: false, message: "No more videos available." });
+    }
+
+    res.status(200).json({ success: true, videos });
   } catch (err) {
     next(err);
   }
 };
+
+
 
 export const trend = async (req, res, next) => {
   try {
-    const videos = await Video.find().sort({ views: -1 });
-    res.status(200).json(videos);
+    const page = parseInt(req.query.page) || 1; // Default to page 1 if not provided
+    const limit = 12; // Number of videos per page
+
+    // Calculate the number of videos to skip
+    const skip = (page - 1) * limit;
+
+    // Fetch videos sorted by views in descending order
+    const videos = await Video.find()
+      .sort({ views: -1 }) // Sort by views in descending order
+      .skip(skip) // Skip videos based on the current page
+      .limit(limit); // Limit to 12 videos per page
+
+    if (!videos || videos.length === 0) {
+      return res.status(404).json({ success: false, message: "No more trending videos available." });
+    }
+
+    // Send the cumulative result up to the current page
+    const cumulativeVideos = await Video.find()
+      .sort({ views: -1 }) // Sort by views in descending order
+      .limit(skip + limit); // Get videos up to the current page
+
+    res.status(200).json({ success: true, videos: cumulativeVideos });
   } catch (err) {
     next(err);
   }
 };
+
+
+
+
 
 export const sub = async (req, res, next) => {
   try {
@@ -271,11 +311,9 @@ export const search = async (req, res, next) => {
 };
 
 
-
 export const saveVideo = async (req, res, next) => {
   const userId = req.user.id;
   const videoId = req.params.id;
-  const video = await Video.findById(videoId);
 
   try {
     // Find the user by ID
@@ -286,44 +324,72 @@ export const saveVideo = async (req, res, next) => {
 
     // Check if user.savedVideos is defined
     if (!user.savedVideos) {
-      console.error("User savedVideos array is undefined");
-      return next(createError(500, "User savedVideos array is undefined"));
+      user.savedVideos = []; // Initialize savedVideos array if undefined
+    }
+
+    // Find the video by ID
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return next(createError(404, "Video not found"));
     }
 
     // Check if the video is already saved
-    if (user.savedVideos.includes(videoId)) {
+    const alreadySaved = user.savedVideos.find(
+      (savedItem) => savedItem._id.toString() === videoId
+    );
+    if (alreadySaved) {
       return res.status(400).json({ success: false, message: "Video already saved" });
     }
 
-    // Add the video ID to the user's savedVideos array
-    user.savedVideos.push(videoId);
+    // Add the video data to the user's savedVideos array
+    user.savedVideos.push({
+      _id: video._id,
+      title: video.title,
+      description: video.description,
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl,
+      views: video.views,
+      tags: video.tags,
+      likes: video.likes,
+      videoKey: video.videoKey, // Add videoKey to the saved data
+
+      dislikes: video.dislikes,
+      createdAt: video.createdAt,
+      updatedAt: video.updatedAt,
+    });
+
+    // Save the user document
     await user.save();
-    await addHistory(req.user.id, `You Save Video : ${video.title}" `);
+
+    // Add a history record
+    await addHistory(req.user.id, `You saved a video: ${video.title}`);
 
     res.status(200).json({ success: true, message: "Video saved successfully" });
   } catch (err) {
+    console.error("Error saving video:", err);
     next(err);
   }
 };
-
 
 export const unsaveVideo = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return next(createError(404, "User not found!"));
 
-    // Check if video exists
-    const video = await Video.findById(req.params.id);
-    if (!video) return next(createError(404, "Video not found!"));
+    // Find the video in savedVideos
+    const videoIndex = user.savedVideos.findIndex(
+      (savedItem) => savedItem._id.toString() === req.params.id
+    );
 
-    // Check if the video is saved
-    const isSaved = user.savedVideos.includes(req.params.id);
-    if (!isSaved) return next(createError(400, "Video is not saved!"));
+    if (videoIndex === -1) return next(createError(400, "Video is not saved!"));
 
-    // Remove the video from saved list
-    user.savedVideos = user.savedVideos.filter(id => id !== req.params.id);
+    // Remove the video from savedVideos
+    const removedVideo = user.savedVideos.splice(videoIndex, 1)[0];
+
     await user.save();
-    await addHistory(req.user.id, `You Unsave Video : ${video.title}" `);
+
+    // Add a history record
+    await addHistory(req.user.id, `You unsaved a video: ${removedVideo.title}`);
 
     res.status(200).json({ message: "Video unsaved successfully." });
   } catch (err) {
