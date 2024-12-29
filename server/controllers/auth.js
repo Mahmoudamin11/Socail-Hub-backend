@@ -165,10 +165,12 @@ export const signin = async (req, res, next) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    // Step 6: Send response
+    // Step 7: Send response with user data and balance
     res.status(200).json({
       success: true,
       message: "Login successful! Tokens have been refreshed.",
+      user, // Include user details
+      balance: userBalance.currentCoins, // Include user's balance
     });
   } catch (err) {
     next(err);
