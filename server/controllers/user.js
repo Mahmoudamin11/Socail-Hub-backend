@@ -10,6 +10,7 @@ import { createSystemNotificationForUser } from '../controllers/notification.js'
 import { deductCoinsNew } from '../controllers/balance.js'; // Adjust the path accordingly
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 import mongoose from 'mongoose';
+import cron from "node-cron";
 
 import { getBalance } from './balance.js';
 
@@ -402,54 +403,93 @@ export const sendFriendRequest = async (req, res, next) => {
 
 
 
-
-
-
 export const acceptFriendRequest = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const senderId = req.params.senderId;
 
-    // Check if the sender and receiver are different users
     if (userId === senderId) {
       return res.status(400).json("You cannot accept a friend request from yourself.");
     }
 
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json("User not found.");
+    // جلب بيانات المستخدمين
+    const user = await User.findById(userId).populate("friends.friendId", "friends name profilePicture");
+    const sender = await User.findById(senderId).populate("friends.friendId", "friends name profilePicture");
+
+    if (!user || !sender) {
+      return res.status(404).json("User or Sender not found.");
     }
 
-    // Check if the friend request exists
-    const friendRequest = user.friendRequests.find(request => request.sender.toString() === senderId);
+    // تحقق من وجود طلب الصداقة
+    const friendRequest = user.friendRequests.find((request) => request.sender.toString() === senderId);
     if (!friendRequest) {
       return res.status(404).json("Friend request not found.");
     }
 
-    // Remove friend request from user's profile
-    user.friendRequests = user.friendRequests.filter(request => request.sender.toString() !== senderId);
+    // إزالة طلب الصداقة
+    user.friendRequests = user.friendRequests.filter((request) => request.sender.toString() !== senderId);
 
-    // Add sender to user's friends list
-    user.friends.push(senderId);
+    // إضافة الأصدقاء
+    user.friends.push({
+      friendId: sender._id,
+      friendName: sender.name,
+      friendProfilePicture: sender.profilePicture,
+    });
 
-    // Add user to sender's friends list (establishing a mutual friendship)
-    const sender = await User.findById(senderId);
-    sender.friends.push(userId);
+    sender.friends.push({
+      friendId: user._id,
+      friendName: user.name,
+      friendProfilePicture: user.profilePicture,
+    });
 
+    // تحديث الأصدقاء المشتركين
+    await calculateAndUpdateMutualFriends(user, sender);
+
+    // حفظ التحديثات
     await Promise.all([user.save(), sender.save()]);
 
-    // Notify the sender that the friend request has been accepted
-    const senderUser = await User.findById(senderId);
-    const notificationMessageForSender = `${user.name} accepted your friend request.`;
-    await createNotificationForOwner(userId, senderId, notificationMessageForSender);
-    await addHistory(req.user.id, `You Accept Frind Request From : ${sender.name}" `);
-
-    
     res.status(200).json("Friend request accepted successfully.");
   } catch (err) {
+    console.error("Error accepting friend request:", err);
     next(err);
   }
 };
+
+const calculateAndUpdateMutualFriends = async (user, friend) => {
+  try {
+    // حساب الأصدقاء المشتركين
+    const mutualFriends = user.friends
+      .map((f) => f.friendId.toString())
+      .filter((id) => friend.friends.some((f) => f.friendId.toString() === id))
+      .map((id) => {
+        const mutualFriend = user.friends.find((f) => f.friendId.toString() === id);
+        return {
+          friendId: mutualFriend.friendId,
+          friendName: mutualFriend.friendName,
+          friendProfilePicture: mutualFriend.friendProfilePicture,
+        };
+      });
+
+    // تحديث قائمة mutualFriends للمستخدمين
+    user.friends.forEach((f) => {
+      if (f.friendId.toString() === friend._id.toString()) {
+        f.mutualFriends = mutualFriends;
+      }
+    });
+
+    friend.friends.forEach((f) => {
+      if (f.friendId.toString() === user._id.toString()) {
+        f.mutualFriends = mutualFriends;
+      }
+    });
+
+    console.log(`Mutual friends updated for users ${user._id} and ${friend._id}`);
+  } catch (error) {
+    console.error("Error calculating mutual friends:", error);
+    throw error;
+  }
+};
+
 
 
 

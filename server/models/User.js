@@ -114,11 +114,35 @@ const UserSchema = new mongoose.Schema(
 
     friends: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        friendId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        friendName: {
+          type: String,
+          required: true,
+        },
+        friendProfilePicture: {
+          type: String,
+          default: "",
+        },
+        mutualFriends: [
+          {
+            friendId: {
+              type: mongoose.Schema.Types.ObjectId,
+              ref: "User",
+            },
+            friendName: {
+              type: String,
+            },
+            friendProfilePicture: {
+              type: String,
+              default: "",
+            },
+          },
+        ], // قائمة الأصدقاء المشتركين
       },
     ],
-
     blockedUsers: [
       {
         type: mongoose.Schema.Types.ObjectId,

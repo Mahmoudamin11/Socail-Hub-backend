@@ -6,26 +6,20 @@ export const verifyToken = async (req, res, next) => {
   const accessToken = req.cookies.access_token; // استخراج Access Token من الكوكيز
   const refreshToken = req.cookies.refresh_token; // استخراج Refresh Token من الكوكيز
 
-  if (!accessToken) {
-    console.log("Access token missing. Checking refresh token...");
-    
-    // التحقق من وجود Refresh Token
-    if (!refreshToken) {
-      return res.status(401).json({
-        success: false,
-        message: "You are not authenticated! Refresh token is missing.",
-        status: 401,
-      });
-    }
+  if (!refreshToken) {
+    return res.status(401).json({
+      success: false,
+      message: "Authentication failed: Refresh token is missing.",
+    });
+  }
 
-    // التحقق من صحة Refresh Token
-    jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
+  // التحقق من صلاحية Access Token
+  if (!accessToken) {
+    return jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (err, decoded) => {
       if (err) {
-        console.error("Invalid refresh token:", err);
         return res.status(403).json({
           success: false,
-          message: "Invalid refresh token.",
-          status: 403,
+          message: "Authentication failed: Invalid or expired refresh token.",
         });
       }
 
@@ -33,82 +27,58 @@ export const verifyToken = async (req, res, next) => {
       const newAccessToken = jwt.sign(
         { id: decoded.id, name: decoded.name },
         process.env.JWT_SECRET,
-        { expiresIn: "15m" } // صلاحية التوكن الجديد
+        { expiresIn: "15s" } // 15 ثانية
       );
 
-      // تحديث Access Token في الكوكيز
       res.cookie("access_token", newAccessToken, {
         httpOnly: true,
         secure: true,
         sameSite: "Strict",
-        maxAge: 15*60 * 1000, // 15 min
+        maxAge: 15 * 1000, // 15 ثانية
       });
 
-      console.log("New access token issued for user:", decoded.name);
-
-      req.user = decoded; // إضافة معلومات المستخدم للطلب
-      return next(); // استمر في المعالجة
+      req.user = decoded; // إضافة معلومات المستخدم
+      return next();
     });
-  } else {
-    // التحقق من صلاحية Access Token
-    jwt.verify(accessToken, process.env.JWT_SECRET, (err, decoded) => {
-      if (err) {
-        if (err.name === "TokenExpiredError") {
-          console.log("Access token expired. Attempting to refresh...");
+  }
 
-          // التحقق من وجود Refresh Token
-          if (!refreshToken) {
-            return res.status(401).json({
+  jwt.verify(accessToken, process.env.JWT_SECRET, (err, decoded) => {
+    if (err) {
+      if (err.name === "TokenExpiredError") {
+        // إذا انتهت صلاحية Access Token، حاول تجديدها باستخدام Refresh Token
+        return jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (refreshErr, decodedRefresh) => {
+          if (refreshErr) {
+            return res.status(403).json({
               success: false,
-              message: "Refresh token is missing. Please log in again.",
-              status: 401,
+              message: "Authentication failed: Invalid or expired refresh token.",
             });
           }
 
-          // التحقق من صحة Refresh Token
-          jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, async (refreshErr, decoded) => {
-            if (refreshErr) {
-              console.error("Invalid refresh token:", refreshErr);
-              return res.status(403).json({
-                success: false,
-                message: "Invalid refresh token.",
-                status: 403,
-              });
-            }
+          const newAccessToken = jwt.sign(
+            { id: decodedRefresh.id, name: decodedRefresh.name },
+            process.env.JWT_SECRET,
+            { expiresIn: "15m" }
+          );
 
-            // إنشاء Access Token جديد
-            const newAccessToken = jwt.sign(
-              { id: decoded.id, name: decoded.name },
-              process.env.JWT_SECRET,
-              { expiresIn: "15m" } // صلاحية التوكن الجديد
-            );
-
-            // تحديث Access Token في الكوكيز
-            res.cookie("access_token", newAccessToken, {
-              httpOnly: true,
-              secure: true,
-              sameSite: "Strict",
-              maxAge: 15 * 60 * 1000, // 15 ثانية
-            });
-
-            console.log("New access token issued for user:", decoded.name);
-
-            req.user = decoded; // إضافة معلومات المستخدم للطلب
-            return next(); // استمر في المعالجة
+          res.cookie("access_token", newAccessToken, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "Strict",
+            maxAge: 15 * 60 * 1000,
           });
-        } else {
-          console.error("Invalid access token:", err);
-          return res.status(403).json({
-            success: false,
-            message: "Invalid access token.",
-            status: 403,
-          });
-        }
+
+          req.user = decodedRefresh;
+          return next();
+        });
       } else {
-        req.user = decoded;
-        console.log("Access token verified successfully for user:", decoded.name);
-        next();
+        return res.status(403).json({
+          success: false,
+          message: "Authentication failed: Invalid access token.",
+        });
       }
-    });
-  }
+    } else {
+      req.user = decoded;
+      next();
+    }
+  });
 };

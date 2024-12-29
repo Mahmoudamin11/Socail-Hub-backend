@@ -107,67 +107,6 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
-const updateAccessTokens = async () => {
-  try {
-    // جلب جميع المستخدمين الذين لديهم Refresh Token
-    const users = await User.find({ refreshToken: { $exists: true, $ne: null } });
-
-    for (const user of users) {
-      try {
-        if (!user.accessToken) {
-          throw new Error("Access token not provided");
-        }
-
-        // التحقق من صحة Access Token
-        jwt.verify(user.accessToken, process.env.JWT_SECRET, (err, decoded) => {
-          if (err && err.name === "TokenExpiredError") {
-            console.log(`Access token expired for user: ${user.name}`);
-            throw new Error("Access token expired");
-          } else if (err) {
-            console.error(`Error verifying access token for user ${user.name}: ${err.message}`);
-            throw new Error("Invalid access token");
-          }
-        });
-      } catch (err) {
-        console.log(`Updating access token for user: ${user.name}`);
-
-        // التحقق من صحة Refresh Token
-        jwt.verify(user.refreshToken, process.env.JWT_REFRESH_SECRET, async (refreshErr, decoded) => {
-          if (refreshErr) {
-            console.error(`Invalid refresh token for user: ${user.name}`);
-            return;
-          }
-
-          // إنشاء Access Token جديد
-          const newAccessToken = jwt.sign(
-            { id: user._id, name: user.name },
-            process.env.JWT_SECRET,
-            { expiresIn: "15m" } // صلاحية التوكن 15 ثانية
-          );
-
-          // تحديث Access Token في قاعدة البيانات
-          user.accessToken = newAccessToken;
-          await user.save();
-
-          console.log(`Access token updated for user: ${user.name}`);
-        });
-      }
-    }
-  } catch (err) {
-    console.error("Error updating access tokens:", err.message);
-  }
-};
-
-// جدولة المهمة لتعمل كل 8 ثوانٍ
-cron.schedule("*/15 * * * *", async () => {
-  console.log("Updating access tokens...");
-  await updateAccessTokens();
-  console.log("Access tokens update complete.");
-});
-
-export default updateAccessTokens;
-
-
 
 // Function to handle user sign-in
 export const signin = async (req, res, next) => {
@@ -182,67 +121,42 @@ export const signin = async (req, res, next) => {
     const isCorrect = await bcrypt.compare(password, user.password);
     if (!isCorrect) return next(createError(400, "Username or password is incorrect!"));
 
-    // Step 3: Check or update user's balance
-    let userBalance = await Balance.findOne({ user: user._id });
-    const now = new Date();
-
-    if (!userBalance) {
-      // If no balance record exists, create one with 85 coins
-      userBalance = await Balance.create({
-        user: user._id,
-        currentCoins: 85,
-        lastUpdated: now,
-      });
-    } else {
-      // Check if 24 hours have passed since the last update
-      const lastUpdated = userBalance.lastUpdated || new Date(0); // Default to epoch time if null
-      const hoursSinceLastUpdate = (now - lastUpdated) / (1000 * 60 * 60); // Convert ms to hours
-
-      if (hoursSinceLastUpdate >= 24) {
-        userBalance.currentCoins += 85; // Add 85 coins
-        userBalance.lastUpdated = now; // Update lastUpdated
-        await userBalance.save();
-      }
-    }
-
-    // Step 4: Generate tokens
+    // Step 3: Generate new tokens
     const accessToken = jwt.sign(
       { id: user._id, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" } // Updated expiration time for access token
+      { expiresIn: "15m" } 
     );
+
     const refreshToken = jwt.sign(
       { id: user._id },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Save refresh token to database
+    // Step 4: Update user's refresh token in database
     user.refreshToken = refreshToken;
     await user.save();
 
-    // Set tokens in cookies
+    // Step 5: Set the tokens in cookies
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
-      maxAge: 15 * 60 * 1000, // Match access token expiration time
+      maxAge: 15 * 60 * 1000, // 15 ثانية
     });
 
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // Match refresh token expiration time
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    const { password: _, refreshToken: __, ...userData } = user._doc;
-
+    // Step 6: Send response
     res.status(200).json({
       success: true,
-      message: "Login successful!",
-      user: userData,
-      balance: userBalance.currentCoins, // Return the user's updated balance
+      message: "Login successful! Tokens have been refreshed.",
     });
   } catch (err) {
     next(err);

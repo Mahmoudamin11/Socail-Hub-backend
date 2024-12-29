@@ -173,7 +173,6 @@ export const addView = async (req, res, next) => {
 
 
 
-
 export const random = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1; // Default to page 1 if not provided
@@ -182,18 +181,20 @@ export const random = async (req, res, next) => {
     // Calculate the number of videos to skip
     const skip = (page - 1) * limit;
 
+    // Fetch random videos, skipping previously returned videos
     const videos = await Video.aggregate([
-      { $sample: { size: 1000 } }, // Randomly sample a large number of videos
+      { $sample: { size: 1000 } }, // Randomly sample a large pool of videos
       { $skip: skip },
       { $limit: limit },
     ]);
 
-    if (!videos.length) {
+    if (!videos || videos.length === 0) {
       return res.status(404).json({ success: false, message: "No more videos available." });
     }
 
     res.status(200).json({ success: true, videos });
   } catch (err) {
+    console.error("Error fetching random videos:", err);
     next(err);
   }
 };
@@ -208,26 +209,23 @@ export const trend = async (req, res, next) => {
     // Calculate the number of videos to skip
     const skip = (page - 1) * limit;
 
-    // Fetch videos sorted by views in descending order
+    // Fetch trending videos sorted by views in descending order
     const videos = await Video.find()
       .sort({ views: -1 }) // Sort by views in descending order
-      .skip(skip) // Skip videos based on the current page
-      .limit(limit); // Limit to 12 videos per page
+      .skip(skip) // Skip previously returned videos
+      .limit(limit); // Limit the results to 12 videos
 
     if (!videos || videos.length === 0) {
       return res.status(404).json({ success: false, message: "No more trending videos available." });
     }
 
-    // Send the cumulative result up to the current page
-    const cumulativeVideos = await Video.find()
-      .sort({ views: -1 }) // Sort by views in descending order
-      .limit(skip + limit); // Get videos up to the current page
-
-    res.status(200).json({ success: true, videos: cumulativeVideos });
+    res.status(200).json({ success: true, videos });
   } catch (err) {
+    console.error("Error fetching trending videos:", err);
     next(err);
   }
 };
+
 
 
 
