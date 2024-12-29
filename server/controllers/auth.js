@@ -120,6 +120,18 @@ export const signin = async (req, res, next) => {
     // Step 2: Verify password
     const isCorrect = await bcrypt.compare(password, user.password);
     if (!isCorrect) return next(createError(400, "Username or password is incorrect!"));
+  // Step 3: Check or create balance
+  const userBalance = await Balance.findOne({ user: user._id });
+
+  if (!userBalance) {
+    // Create a new balance with the initial value of 85
+    await Balance.create({
+      user: user._id,
+      currentCoins: 85,
+      lastUpdated: new Date(),
+    });
+    console.log(`Initial balance of 85 created for user: ${user.name}`);
+  }
 
     // Step 3: Generate new tokens
     const accessToken = jwt.sign(
