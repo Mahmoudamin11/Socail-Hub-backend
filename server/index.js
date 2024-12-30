@@ -29,6 +29,7 @@ import chatRoutes from './routes/chatRoutes.js';
 import callRoutes from './routes/calls.js';
 import { verifyToken } from './verifyToken.js';
 import { auth } from "./firebase.js";
+import Notification from './models/Notification.js';
 
 console.log("Mongo URI:", process.env.MONGO_URI);
 console.log("Port:", process.env.PORT);
@@ -60,6 +61,8 @@ const io = new Server(server, {
 
 global.onlineUsers = new Map();
 
+global.chatSocket = io;
+
 io.on("connection", (socket) => {
   console.log("New socket connection:", socket.id);
 
@@ -70,11 +73,20 @@ io.on("connection", (socket) => {
   });
 
   // Real-Time Notifications
-  socket.on("send-notification", (data) => {
+  socket.on("send-notification", async (data) => {
     try {
-      const sendUserSocket = global.onlineUsers.get(data.to);
+      const { to, from, message } = data;
+
+      // Save notification to the database
+      const notification = await Notification.create({
+        message,
+        TO: to,
+        FROM: from,
+      });
+
+      const sendUserSocket = global.onlineUsers.get(to);
       if (sendUserSocket) {
-        socket.to(sendUserSocket).emit("notification-received", data);
+        socket.to(sendUserSocket).emit("notification-received", notification);
       }
     } catch (error) {
       console.error("Error handling send-notification:", error);
