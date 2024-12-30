@@ -52,8 +52,9 @@ app.use(session({
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5000",
-    credentials: true,
+    origin: "http://localhost:3000", // عنوان الفرونت إند
+    methods: ["GET", "POST"],       // السماح بالطرق المستخدمة
+    credentials: true               // السماح بملفات تعريف الارتباط
   },
 });
 
