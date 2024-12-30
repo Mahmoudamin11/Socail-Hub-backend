@@ -34,7 +34,7 @@ console.log("Mongo URI:", process.env.MONGO_URI);
 console.log("Port:", process.env.PORT);
 
 const app = express();
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cookieParser());
@@ -52,9 +52,9 @@ app.use(session({
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // عنوان الفرونت إند
-    methods: ["GET", "POST"],       // السماح بالطرق المستخدمة
-    credentials: true               // السماح بملفات تعريف الارتباط
+    origin: "http://localhost:5173", // عنوان الفرونت إند
+    methods: ["GET", "POST"],
+    credentials: true,
   },
 });
 
@@ -182,7 +182,6 @@ app.use('/api/report', reportRoutes);
 app.use('/api/chatRoutes', chatRoutes);
 app.use('/api/calls', verifyToken, callRoutes);
 app.use('/uploads', express.static('uploads'));
-
 
 app.use((err, req, res, next) => {
   const status = err.status || 500;
