@@ -16,20 +16,52 @@ export const addHistory = async (userId, action) => {
 
 export const getUserHistory = async (req, res, next) => {
   try {
-    const { userId } = req.body;
+    // Extract user ID from token (provided by verifyToken middleware)
+    const userId = req.user?.id;
 
-    // Validate if userId is a valid ObjectId
+    // Validate user ID
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return next(createError(400, "Invalid user ID format!"));
+      return res.status(400).json({
+        success: false,
+        status: 400,
+        message: "Invalid user ID format!",
+      });
     }
 
-    // Fetch user history
-    const history = await History.find({ user: userId }).populate('user');
+    // Extract date from request body
+    const { day, month, year } = req.body;
+
+    // Validate that date is provided
+    if (!day || !month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "Day, month, and year are required!",
+      });
+    }
+
+    // Construct the start and end dates for filtering
+    const startDate = new Date(year, month - 1, day, 0, 0, 0); // Start of the day
+    const endDate = new Date(year, month - 1, day, 23, 59, 59); // End of the day
+
+    // Query the database for history entries for the user on the specified date
+    const history = await History.find({
+      user: userId,
+      createdAt: { $gte: startDate, $lte: endDate },
+    });
+
+    // If no history is found, return a 404 response
     if (!history.length) {
-      return res.status(404).json({ message: "No history found for this user!" });
+      return res.status(404).json({
+        success: false,
+        message: "No history found for this user on the specified date!",
+      });
     }
 
-    res.status(200).json({ success: true, history });
+    // Return the history
+    res.status(200).json({
+      success: true,
+      history,
+    });
   } catch (error) {
     console.error("Error fetching user history:", error.message);
     next(error);
