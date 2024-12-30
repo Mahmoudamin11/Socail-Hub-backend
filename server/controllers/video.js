@@ -5,6 +5,7 @@ import View from '../models/View.js';
 import { createNotificationsForSubscribersOrFollowers } from '../controllers/notification.js';
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 import { encrypt } from './bycripting_algorithem.js'; // استدعاء ملف التشفير
+import mongoose from "mongoose";
 
 
 
@@ -171,8 +172,6 @@ export const addView = async (req, res, next) => {
 
 
 
-
-
 export const random = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page) || 1; // Default to page 1 if not provided
@@ -181,16 +180,30 @@ export const random = async (req, res, next) => {
     // Calculate the number of videos to skip
     const skip = (page - 1) * limit;
 
-    // Fetch random videos, skipping previously returned videos
+    // Maintain a list of already returned video IDs in the request session
+    req.session.returnedVideoIds = req.session.returnedVideoIds || [];
+
+    // Fetch random videos, ensuring they haven't been returned before
     const videos = await Video.aggregate([
-      { $sample: { size: 1000 } }, // Randomly sample a large pool of videos
-      { $skip: skip },
-      { $limit: limit },
+      {
+        $match: {
+          _id: {
+            $nin: req.session.returnedVideoIds.map(id => new mongoose.Types.ObjectId(id)),
+          },
+        },
+      },
+      { $sample: { size: limit } },
     ]);
 
     if (!videos || videos.length === 0) {
       return res.status(404).json({ success: false, message: "No more videos available." });
     }
+
+    // Add the returned video IDs to the session
+    req.session.returnedVideoIds = [
+      ...req.session.returnedVideoIds,
+      ...videos.map(video => video._id.toString()),
+    ];
 
     res.status(200).json({ success: true, videos });
   } catch (err) {
@@ -198,7 +211,6 @@ export const random = async (req, res, next) => {
     next(err);
   }
 };
-
 
 
 export const trend = async (req, res, next) => {
