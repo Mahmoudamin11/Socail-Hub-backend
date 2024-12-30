@@ -818,6 +818,7 @@ export const getRandomUsers = async (req, res, next) => {
       return res.status(404).json({ message: "No more users available." });
     }
 
+
     res.status(200).json({ success: true, users: sanitizedUsers });
   } catch (err) {
     console.error("Error in getRandomUsers:", err);
