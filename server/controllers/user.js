@@ -742,7 +742,6 @@ const isUserBlocked = async (senderId, receiverId) => {
 
 
 
-
 export const getRandomUsers = async (req, res, next) => {
   const userId = req.user.id; // ID of the current user
   const { page = 1 } = req.query; // Default to page 1
@@ -759,19 +758,32 @@ export const getRandomUsers = async (req, res, next) => {
     const { friends } = currentUser;
 
     // Exclude friends and the current user from the search
-    const excludedIds = [...friends.map(friend => friend.toString()), userId.toString()];
+    const excludedIds = [
+      ...friends.map(friend => friend.toString()),
+      userId.toString(),
+    ];
+
+    // Validate and filter ObjectIds
+    const validExcludedIds = excludedIds.filter(id => mongoose.isValidObjectId(id));
 
     // Fetch random users
     const users = await User.aggregate([
       {
         $match: {
-          _id: { $nin: excludedIds.map(id => new mongoose.Types.ObjectId(id)) },
+          _id: {
+            $nin: validExcludedIds.map(id => new mongoose.Types.ObjectId(id)),
+          },
         },
       },
       {
         $addFields: {
           isFollower: {
-            $in: ["$_id", currentUser.SubscribersOrFollowers.map(id => new mongoose.Types.ObjectId(id))],
+            $in: [
+              "$_id",
+              currentUser.SubscribersOrFollowers
+                .filter(id => mongoose.isValidObjectId(id))
+                .map(id => new mongoose.Types.ObjectId(id)),
+            ],
           },
         },
       },
@@ -812,7 +824,6 @@ export const getRandomUsers = async (req, res, next) => {
     next(err);
   }
 };
-
 
 
 
