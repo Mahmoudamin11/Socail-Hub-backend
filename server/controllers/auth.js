@@ -108,6 +108,7 @@ export const verifyOTPAndResetPassword = async (req, res, next) => {
 
 
 
+
 // Function to handle user sign-in
 export const signin = async (req, res, next) => {
   try {
@@ -120,24 +121,31 @@ export const signin = async (req, res, next) => {
     // Step 2: Verify password
     const isCorrect = await bcrypt.compare(password, user.password);
     if (!isCorrect) return next(createError(400, "Username or password is incorrect!"));
-  // Step 3: Check or create balance
-  const userBalance = await Balance.findOne({ user: user._id });
 
-  if (!userBalance) {
-    // Create a new balance with the initial value of 85
-    await Balance.create({
-      user: user._id,
-      currentCoins: 85,
-      lastUpdated: new Date(),
-    });
-    console.log(`Initial balance of 85 created for user: ${user.name}`);
-  }
+    // Step 3: Check or create balance
+    let userBalance = await Balance.findOne({ user: user._id });
 
-    // Step 3: Generate new tokens
+    if (!userBalance) {
+      // Create a new balance with the initial value of 85
+      userBalance = await Balance.create({
+        user: user._id,
+        currentCoins: 85,
+        lastUpdated: new Date(),
+      });
+      console.log(`Initial balance of 85 created for user: ${user.name}`);
+    }
+
+    // Step 4: Validate environment variables
+    if (!process.env.JWT_SECRET || !process.env.JWT_REFRESH_SECRET) {
+      console.error("JWT_SECRET or JWT_REFRESH_SECRET is missing");
+      throw new Error("Environment variables for JWT are not set.");
+    }
+
+    // Step 5: Generate new tokens
     const accessToken = jwt.sign(
       { id: user._id, name: user.name },
       process.env.JWT_SECRET,
-      { expiresIn: "15m" } 
+      { expiresIn: "15m" }
     );
 
     const refreshToken = jwt.sign(
@@ -146,38 +154,41 @@ export const signin = async (req, res, next) => {
       { expiresIn: "7d" }
     );
 
-    // Step 4: Update user's refresh token in database
+    // Step 6: Update user's refresh token in database
     user.refreshToken = refreshToken;
     await user.save();
 
-    // Step 5: Set the tokens in cookies
+    // Step 7: Set the tokens in cookies
     res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
-      maxAge: 15 * 60 * 1000, // 15 ثانية
+      maxAge: 15 * 60 * 1000, // 15 دقائق
     });
 
     res.cookie("refresh_token", refreshToken, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 أيام
     });
 
-    // Step 7: Send response with user data and balance
+    // Step 8: Send response with all user data
+    const { password: _, refreshToken: __, ...userData } = user._doc;
+
     res.status(200).json({
       success: true,
       message: "Login successful! Tokens have been refreshed.",
-      user, // Include user details
-      balance: userBalance.currentCoins, // Include user's balance
+      user: {
+        ...userData, // Include all user data except sensitive ones
+        balance: userBalance.currentCoins, // Include user's balance
+      },
     });
   } catch (err) {
+    console.error("Error during sign-in:", err);
     next(err);
   }
 };
-
-
 
 
 
