@@ -182,7 +182,7 @@ app.use('/api/chatRoutes', chatRoutes);
 app.use('/api/calls', verifyToken, callRoutes);
 app.use('/uploads', express.static('uploads'));
 
-// Global error handler
+
 app.use((err, req, res, next) => {
   const status = err.status || 500;
   const message = err.message || "Something went wrong!";
