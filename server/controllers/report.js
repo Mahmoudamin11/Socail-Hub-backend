@@ -183,41 +183,29 @@ const newReport = new Report({
 };
 
 
-export const getUserHistory = async (req, res, next) => {
+// Function to get all reports made by the current user
+const getUserReports = async (req, res) => {
   try {
-    const { day, month, year } = req.body;
+    const userId = req.user.id; // Retrieve the user ID from the authenticated request
 
-    // Extract user ID from token (set by verifyToken middleware)
-    const userId = req.user?.id;
-
-    // Validate userId
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      console.error("Invalid user ID:", userId);
-      return res.status(400).json({ success: false, status: 400, message: "Invalid user ID format!" });
-    }
-
-    // Validate if day, month, and year are provided
-    if (!day || !month || !year) {
-      return res.status(400).json({ success: false, message: "Day, month, and year are required!" });
-    }
-
-    // Construct the date range for the query
-    const startDate = new Date(year, month - 1, day, 0, 0, 0); // Start of the day
-    const endDate = new Date(year, month - 1, day, 23, 59, 59); // End of the day
-
-    // Fetch user history within the date range
-    const history = await History.find({
-      user: userId,
-      createdAt: { $gte: startDate, $lte: endDate },
+    // Fetch reports from the database where the user is the reporter
+    const userReports = await Report.find({ user: userId }).populate({
+      path: 'reportedUser',
+      select: 'name profilePicture',
     });
 
-    if (!history.length) {
-      return res.status(404).json({ success: false, message: "No history found for this user on the specified date!" });
-    }
-
-    res.status(200).json({ success: true, history });
+    // Return the reports to the client
+    return res.status(200).json({
+      success: true,
+      reports: userReports,
+    });
   } catch (error) {
-    console.error("Error fetching user history:", error.message);
-    next(error);
+    console.error('Error fetching user reports:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching user reports',
+    });
   }
 };
+
+export { getUserReports };

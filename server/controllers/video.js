@@ -169,48 +169,42 @@ export const addView = async (req, res, next) => {
 
 
 
-
-
-
 export const random = async (req, res, next) => {
   try {
-    const page = parseInt(req.query.page) || 1; // Default to page 1 if not provided
-    const limit = 12; // Number of videos per page
+      const limit = 12; // Number of videos to return per request
 
-    // Calculate the number of videos to skip
-    const skip = (page - 1) * limit;
+      // Initialize returnedVideoIds in the session if not present
+      req.session.returnedVideoIds = req.session.returnedVideoIds || [];
 
-    // Maintain a list of already returned video IDs in the request session
-    req.session.returnedVideoIds = req.session.returnedVideoIds || [];
-
-    // Fetch random videos, ensuring they haven't been returned before
-    const videos = await Video.aggregate([
-      {
-        $match: {
-          _id: {
-            $nin: req.session.returnedVideoIds.map(id => new mongoose.Types.ObjectId(id)),
+      // Fetch random videos excluding already returned ones
+      const videos = await Video.aggregate([
+          {
+              $match: {
+                  _id: {
+                      $nin: req.session.returnedVideoIds.map(id => new mongoose.Types.ObjectId(id)),
+                  },
+              },
           },
-        },
-      },
-      { $sample: { size: limit } },
-    ]);
+          { $sample: { size: limit } },
+      ]);
 
-    if (!videos || videos.length === 0) {
-      return res.status(404).json({ success: false, message: "No more videos available." });
-    }
+      if (!videos || videos.length === 0) {
+          return res.status(404).json({ success: false, message: "No more videos available." });
+      }
 
-    // Add the returned video IDs to the session
-    req.session.returnedVideoIds = [
-      ...req.session.returnedVideoIds,
-      ...videos.map(video => video._id.toString()),
-    ];
+      // Add the returned video IDs to the session
+      req.session.returnedVideoIds = [
+          ...req.session.returnedVideoIds,
+          ...videos.map(video => video._id.toString()),
+      ];
 
-    res.status(200).json({ success: true, videos });
+      res.status(200).json({ success: true, videos });
   } catch (err) {
-    console.error("Error fetching random videos:", err);
-    next(err);
+      console.error("Error fetching random videos:", err);
+      next(err);
   }
 };
+
 
 
 export const trend = async (req, res, next) => {

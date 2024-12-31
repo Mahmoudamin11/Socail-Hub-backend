@@ -40,17 +40,34 @@ export const sendMessage = async (req, res, next) => {
     }
 
     try {
-      const senderId = req.user.id;
+      const senderId = req.user.id; // Authenticated user ID
       const { receiverId, content } = req.body;
       let photoUrl = null;
       let videoUrl = null;
 
-      const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
+      // Retrieve sender details
+      const sender = await User.findById(senderId).select('name');
+      if (!sender) {
+        return res.status(404).json({ success: false, message: 'Sender not found' });
+      }
 
+      const senderName = sender.name;
+
+      // Check if the receiver exists
+      const receiver = await User.findById(receiverId);
+      if (!receiver) {
+        return res.status(404).json({ success: false, message: 'Receiver not found' });
+      }
+
+      const receiverName = receiver.name;
+
+      // Check if the receiver is blocked
+      const isReceiverBlocked = await isUserBlocked(senderId, receiverId);
       if (isReceiverBlocked) {
         return res.status(403).json({ success: false, message: 'Cannot send messages to blocked users' });
       }
 
+      // Handle file uploads
       if (req.file) {
         const fileExtension = path.extname(req.file.filename).toLowerCase();
         if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
@@ -60,10 +77,22 @@ export const sendMessage = async (req, res, next) => {
         }
       }
 
-      const message = new Message({ senderId, receiverId, content, photoUrl, videoUrl });
+      // Save the message
+      const message = new Message({
+        senderId,
+        receiverId,
+        content,
+        photoUrl,
+        videoUrl,
+        type: 'chat',
+      });
       await message.save();
 
-      const notificationMessage = `${req.user.name} sent you a message: "${content}"`;
+      // Add history for the direct message
+      await addHistory(senderId, `Sent a message to user ${receiverName}`);
+
+      // Create notification with sender's name
+      const notificationMessage = `${senderName} sent you a message: "${content}"`;
       await createNotificationForUser(senderId, receiverId, notificationMessage);
 
       res.status(201).json(message);
@@ -76,21 +105,37 @@ export const sendMessage = async (req, res, next) => {
 
 export const getConversation = async (req, res, next) => {
   try {
-    const senderId = req.user.id; // Assuming req.user.id is the sender's ID from JWT
-    const receiverId = req.body.receiverId;
+      const senderId = req.user.id; // Sender ID from the authenticated user
+      const { receiverId } = req.body; // Receiver ID from the request body
 
-    const messages = await Message.find({
-      $or: [
-        { senderId, receiverId },
-        { senderId: receiverId, receiverId: senderId }
-      ]
-    }).sort({ timestamp: 1 });
+      if (!receiverId) {
+          return res.status(400).json({ message: 'receiverId is required in the request body' });
+      }
 
-    res.json(messages);
+      // Fetch messages between sender and receiver
+      const messages = await Message.find({
+          $or: [
+              { senderId, receiverId },
+              { senderId: receiverId, receiverId: senderId }
+          ]
+      }).sort({ timestamp: 1 });
+
+      // Fetch receiver details (name and profile picture)
+      const receiver = await User.findById(receiverId).select('name profilePicture');
+
+      // Process messages to include receiver details
+      const processedMessages = messages.map((message) => ({
+          ...message._doc,
+          receiverName: receiver?.name || "Unknown Receiver",
+          receiverProfilePicture: receiver?.profilePicture || null,
+      }));
+
+      res.json(processedMessages);
   } catch (error) {
-    next(error);
+      next(error);
   }
 };
+
 
 export const markMessageAsRead = async (req, res, next) => {
   try {
@@ -111,21 +156,38 @@ export const markMessageAsRead = async (req, res, next) => {
   }
 };
 
+
+
 export const getGroupConversations = async (req, res, next) => {
   try {
-    const { groupId } = req.body; // Assuming groupId is passed in the JSON body
+      const { groupId } = req.body; // Assuming groupId is passed in the JSON body
 
-    if (!groupId) {
-      return res.status(400).json({ message: 'groupId is required in the request body' });
-    }
+      if (!groupId) {
+          return res.status(400).json({ message: 'groupId is required in the request body' });
+      }
 
-    const messages = await Message.find({ groupId }).sort({ timestamp: 1 });
+      // Fetch all community messages for the specified group
+      const messages = await Message.find({ groupId, type: 'community' }).sort({ timestamp: 1 });
 
-    res.json(messages);
+      // Fetch sender details (name and profile picture) for each message
+      const processedMessages = await Promise.all(
+          messages.map(async (message) => {
+              const sender = await User.findById(message.senderId).select('name profilePicture');
+              return {
+                  ...message._doc,
+                  senderName: sender?.name || "Unknown Sender",
+                  senderProfilePicture: sender?.profilePicture || null,
+              };
+          })
+      );
+
+      res.json(processedMessages);
   } catch (error) {
-    next(error);
+      next(error);
   }
 };
+
+
 
 // Function to get community members based on communityId
 const getCommunityMembers = async (communityId) => {
@@ -135,47 +197,113 @@ const getCommunityMembers = async (communityId) => {
 
 export const sendCommunityMessage = async (req, res, next) => {
   upload.single('media')(req, res, async (err) => {
-    if (err) {
-      return next(createError(500, 'File upload failed'));
-    }
-
-    try {
-      const { communityId, content } = req.body;
-      const senderId = req.user.id;
-      let photoUrl = null;
-      let videoUrl = null;
-
-      if (!communityId || !content || !senderId) {
-        return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
+      if (err) {
+          return next(createError(500, 'File upload failed'));
       }
 
-      if (req.file) {
-        const fileExtension = path.extname(req.file.filename).toLowerCase();
-        if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
-          photoUrl = req.file.path;
-        } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
-          videoUrl = req.file.path;
-        }
+      try {
+          const { communityId, content } = req.body;
+          const senderId = req.user.id;
+          let photoUrl = null;
+          let videoUrl = null;
+
+          if (!communityId || !content || !senderId) {
+              return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
+          }
+
+          if (req.file) {
+              const fileExtension = path.extname(req.file.filename).toLowerCase();
+              if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
+                  photoUrl = req.file.path;
+              } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
+                  videoUrl = req.file.path;
+              }
+          }
+
+          // Verify the community exists
+          const community = await Community.findById(communityId);
+
+          if (!community) {
+              return res.status(404).json({
+                  success: false,
+                  message: 'Community not found',
+              });
+          }
+
+          // Save the community message with receiverId as communityId
+          const message = new Message({
+              senderId,
+              receiverId: communityId, // Set receiverId to communityId
+              content,
+              photoUrl,
+              videoUrl,
+              type: 'community',
+          });
+          await message.save();
+
+          res.status(201).json({
+              success: true,
+              message: 'Community message sent successfully',
+          });
+      } catch (error) {
+          next(error);
       }
-
-      const senderName = await getUserFullName(senderId);
-
-      const community = await Community.findById(communityId);
-
-      if (!community) {
-        return res.status(404).json({ success: false, message: 'Community not found' });
-      }
-
-      const members = await getCommunityMembers(communityId);
-
-      members.forEach(async (memberId) => {
-        const notificationMessage = `${senderName} sent a message in the community "${community.name}" - ${content}`;
-        await createNotificationForUser(senderId, memberId, notificationMessage);
-      });
-
-      res.status(201).json({ success: true, message: 'Community message sent successfully' });
-    } catch (error) {
-      next(error);
-    }
   });
+};
+
+export const getUsersWithChatMessages = async (req, res, next) => {
+  try {
+      const userId = req.user?.id;
+
+      if (!userId) {
+          return res.status(400).json({ message: "User ID is required" });
+      }
+
+      // Find messages where the user is either the sender or receiver
+      const userMessages = await Message.find({
+          $or: [{ senderId: userId }, { receiverId: userId }],
+      }).populate('senderId', 'name'); // Populate sender's name
+
+      // Process messages to dynamically fetch receiver name
+      const processedMessages = await Promise.all(
+          userMessages.map(async (message) => {
+              if (message.receiverId) {
+                  // Try to find the receiverId in the User model
+                  const user = await User.findById(message.receiverId).select('name');
+                  if (user) {
+                      return {
+                          ...message._doc,
+                          receiverName: user.name,
+                      };
+                  }
+
+                  // If not found in User model, try the Community model
+                  const community = await Community.findById(message.receiverId).select('name');
+                  if (community) {
+                      return {
+                          ...message._doc,
+                          receiverName: community.name,
+                      };
+                  }
+
+                  // If receiverId is not found in either model
+                  return {
+                      ...message._doc,
+                      receiverName: "Unknown Receiver",
+                  };
+              }
+
+              // Handle messages with no receiverId
+              return {
+                  ...message._doc,
+                  receiverName: "Receiver Not Found",
+              };
+          })
+      );
+
+      res.status(200).json({ success: true, messages: processedMessages });
+  } catch (error) {
+      console.error("Error fetching user chat messages:", error);
+      next(error);
+  }
 };
