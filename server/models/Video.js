@@ -37,7 +37,14 @@ const videoSchema = new mongoose.Schema({
     dislikes: {
         type: [String],
         default: [],
-    },
+    }, owner: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+      
+      ownerName: String, // اسم صاحب الفيديو
+      ownerProfilePicture: String, // صورة بروفايل صاحب الفيديو
     videoKey: {
         type: String,
         required: true,

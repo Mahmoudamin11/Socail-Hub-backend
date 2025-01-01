@@ -253,57 +253,73 @@ export const sendCommunityMessage = async (req, res, next) => {
 
 export const getUsersWithChatMessages = async (req, res, next) => {
   try {
-      const userId = req.user?.id;
+    const userId = req.user?.id;
 
-      if (!userId) {
-          return res.status(400).json({ message: "User ID is required" });
+    if (!userId) {
+      return res.status(400).json({ message: "User ID is required" });
+    }
+
+    // Find messages where the user is either the sender or receiver
+    const userMessages = await Message.find({
+      $or: [{ senderId: userId }, { receiverId: userId }],
+    })
+      .sort({ timestamp: -1 }) // Sort by latest messages first
+      .exec();
+
+    // Create a map to store the latest message with each user
+    const userMap = new Map();
+
+    userMessages.forEach((message) => {
+      const senderId = message.senderId ? message.senderId.toString() : null;
+      const receiverId = message.receiverId ? message.receiverId.toString() : null;
+
+      // Ensure both senderId and receiverId exist before proceeding
+      if (!senderId || !receiverId) return;
+
+      const otherUserId =
+        senderId === userId ? receiverId : senderId;
+
+      // Only store the latest message for each user
+      if (!userMap.has(otherUserId)) {
+        userMap.set(otherUserId, message);
       }
+    });
 
-      // Find messages where the user is either the sender or receiver
-      const userMessages = await Message.find({
-          $or: [{ senderId: userId }, { receiverId: userId }],
-      }).populate('senderId', 'name'); // Populate sender's name
+    // Process the map to fetch user or community details
+    const processedMessages = await Promise.all(
+      Array.from(userMap.entries()).map(async ([otherUserId, message]) => {
+        // Try to find the otherUserId in the User model
+        const user = await User.findById(otherUserId).select('name profilePicture');
+        if (user) {
+          return {
+            ...message._doc,
+            receiverName: user.name,
+            receiverProfilePicture: user.profilePicture,
+          };
+        }
 
-      // Process messages to dynamically fetch receiver name
-      const processedMessages = await Promise.all(
-          userMessages.map(async (message) => {
-              if (message.receiverId) {
-                  // Try to find the receiverId in the User model
-                  const user = await User.findById(message.receiverId).select('name');
-                  if (user) {
-                      return {
-                          ...message._doc,
-                          receiverName: user.name,
-                      };
-                  }
+        // If not found in User model, try the Community model
+        const community = await Community.findById(otherUserId).select('name');
+        if (community) {
+          return {
+            ...message._doc,
+            receiverName: community.name,
+            receiverProfilePicture: null, // Communities don't have profile pictures
+          };
+        }
 
-                  // If not found in User model, try the Community model
-                  const community = await Community.findById(message.receiverId).select('name');
-                  if (community) {
-                      return {
-                          ...message._doc,
-                          receiverName: community.name,
-                      };
-                  }
+        // If otherUserId is not found in either model
+        return {
+          ...message._doc,
+          receiverName: "Unknown Receiver",
+          receiverProfilePicture: null,
+        };
+      })
+    );
 
-                  // If receiverId is not found in either model
-                  return {
-                      ...message._doc,
-                      receiverName: "Unknown Receiver",
-                  };
-              }
-
-              // Handle messages with no receiverId
-              return {
-                  ...message._doc,
-                  receiverName: "Receiver Not Found",
-              };
-          })
-      );
-
-      res.status(200).json({ success: true, messages: processedMessages });
+    res.status(200).json({ success: true, messages: processedMessages });
   } catch (error) {
-      console.error("Error fetching user chat messages:", error);
-      next(error);
+    console.error("Error fetching user chat messages:", error);
+    next(error);
   }
 };

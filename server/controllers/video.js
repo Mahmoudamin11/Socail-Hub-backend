@@ -12,47 +12,109 @@ import mongoose from "mongoose";
 
 
 
-export const addVideo = async (req, res, next) => {
+export const saveVideo = async (req, res, next) => {
+  const userId = req.user.id;
+  const videoId = req.params.id;
+
   try {
     // العثور على المستخدم
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(createError(404, "User not found"));
+    }
+
+    // التأكد من وجود قائمة savedVideos
+    if (!user.savedVideos) {
+      user.savedVideos = [];
+    }
+
+    // العثور على الفيديو
+    const video = await Video.findById(videoId);
+    if (!video) {
+      return next(createError(404, "Video not found"));
+    }
+
+    // جلب بيانات صاحب الفيديو
+    const videoOwner = await User.findById(video.userId);
+    if (!videoOwner) {
+      return next(createError(404, "Owner details not found for this video"));
+    }
+
+    // التحقق إذا كان الفيديو محفوظًا مسبقًا
+    const alreadySaved = user.savedVideos.find(
+      (savedItem) => savedItem._id.toString() === videoId
+    );
+    if (alreadySaved) {
+      return res.status(400).json({ success: false, message: "Video already saved" });
+    }
+
+    // إضافة الفيديو مع بيانات صاحب الفيديو إلى savedVideos
+    user.savedVideos.push({
+      _id: video._id,
+      title: video.title,
+      description: video.description,
+      videoUrl: video.videoUrl,
+      thumbnailUrl: video.thumbnailUrl,
+      views: video.views,
+      tags: video.tags,
+      likes: video.likes,
+      dislikes: video.dislikes,
+      createdAt: video.createdAt,
+      updatedAt: video.updatedAt,
+      ownerName: videoOwner.name, // إضافة اسم صاحب الفيديو
+      ownerProfilePicture: videoOwner.profilePicture, // إضافة صورة بروفايل صاحب الفيديو
+    });
+
+    // حفظ التحديثات في بيانات المستخدم
+    await user.save();
+
+    // إضافة سجل نشاط
+    await addHistory(req.user.id, `You saved a video: ${video.title}`);
+
+    res.status(200).json({ success: true, message: "Video saved successfully" });
+  } catch (err) {
+    console.error("Error saving video:", err);
+    next(err);
+  }
+};
+
+
+export const addVideo = async (req, res, next) => {
+  try {
     const user = await User.findById(req.user.id);
     if (!user) {
       return next(createError(404, "User not found"));
     }
 
-    // إنشاء النص الأساسي لتشفير videoKey
     const uniqueIdentifier = `${req.user.id}-${Date.now()}-${Math.random()}`;
     const appName = "Social_Hub";
 
-    // تشفير videoKey باستخدام الوظيفة المستدعاة
     const videoKey = `${encrypt(uniqueIdentifier)}-${appName}`;
 
-    // إنشاء فيديو جديد
     const newVideo = new Video({
       userId: req.user.id,
       videoKey,
       ...req.body,
+      owner: req.user.id, // Assign user ID as owner
+      ownerName: user.name, // Store owner's name
+      ownerProfilePicture: user.profilePicture, // Store owner's profile picture
     });
 
-    // حفظ الفيديو الجديد
     const savedVideo = await newVideo.save();
 
-    // إنشاء رسالة إشعار
     const message = `New video added: ${savedVideo.title} Link: ${savedVideo.videoUrl} --->>> By ${user.name}`;
 
-    // إنشاء الإشعارات للمشتركين أو المتابعين
     await createNotificationsForSubscribersOrFollowers(req.user.id, message);
 
-    // إضافة سجل النشاط
     await addHistory(req.user.id, `You added a new video: ${savedVideo.title}`);
 
-    // استجابة النجاح
     res.status(200).json(savedVideo);
   } catch (err) {
     console.error('Error adding video:', err.message);
     next(err);
   }
 };
+
 
 
 export const updateVideo = async (req, res, next) => {
@@ -315,65 +377,6 @@ export const search = async (req, res, next) => {
 };
 
 
-export const saveVideo = async (req, res, next) => {
-  const userId = req.user.id;
-  const videoId = req.params.id;
-
-  try {
-    // Find the user by ID
-    const user = await User.findById(userId);
-    if (!user) {
-      return next(createError(404, "User not found"));
-    }
-
-    // Check if user.savedVideos is defined
-    if (!user.savedVideos) {
-      user.savedVideos = []; // Initialize savedVideos array if undefined
-    }
-
-    // Find the video by ID
-    const video = await Video.findById(videoId);
-    if (!video) {
-      return next(createError(404, "Video not found"));
-    }
-
-    // Check if the video is already saved
-    const alreadySaved = user.savedVideos.find(
-      (savedItem) => savedItem._id.toString() === videoId
-    );
-    if (alreadySaved) {
-      return res.status(400).json({ success: false, message: "Video already saved" });
-    }
-
-    // Add the video data to the user's savedVideos array
-    user.savedVideos.push({
-      _id: video._id,
-      title: video.title,
-      description: video.description,
-      videoUrl: video.videoUrl,
-      thumbnailUrl: video.thumbnailUrl,
-      views: video.views,
-      tags: video.tags,
-      likes: video.likes,
-      videoKey: video.videoKey, // Add videoKey to the saved data
-
-      dislikes: video.dislikes,
-      createdAt: video.createdAt,
-      updatedAt: video.updatedAt,
-    });
-
-    // Save the user document
-    await user.save();
-
-    // Add a history record
-    await addHistory(req.user.id, `You saved a video: ${video.title}`);
-
-    res.status(200).json({ success: true, message: "Video saved successfully" });
-  } catch (err) {
-    console.error("Error saving video:", err);
-    next(err);
-  }
-};
 
 export const unsaveVideo = async (req, res, next) => {
   try {
