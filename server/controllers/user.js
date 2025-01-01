@@ -745,7 +745,7 @@ const isUserBlocked = async (senderId, receiverId) => {
 export const getRandomUsers = async (req, res, next) => {
   const userId = req.user.id; // ID of the current user
   const { page = 1 } = req.query; // Default to page 1
-  const pageSize = 10; // Number of users per page
+  const pageSize = 6; // Number of users per page
 
   try {
     // Get current user's data
@@ -802,7 +802,7 @@ export const getRandomUsers = async (req, res, next) => {
       },
     ]);
 
-    // Process each user to determine `youFollow` and `sendFriendRequest`
+    // Process each user to determine youFollow and sendFriendRequest
     const processedUsers = users.map(user => ({
       ...user,
       youFollow: user.SubscribersOrFollowers.includes(userId), // Check if userId is in SubscribersOrFollowers

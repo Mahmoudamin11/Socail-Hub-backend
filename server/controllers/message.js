@@ -105,20 +105,15 @@ export const sendMessage = async (req, res, next) => {
 
 export const getConversation = async (req, res, next) => {
   try {
-      const senderId = req.user.id; // Sender ID from the authenticated user
-      const { receiverId } = req.body; // Receiver ID from the request body
+    const senderId = req.user.id; // Assuming req.user.id is the sender's ID from JWT
+    const receiverId = req.query.receiverId;
 
-      if (!receiverId) {
-          return res.status(400).json({ message: 'receiverId is required in the request body' });
-      }
-
-      // Fetch messages between sender and receiver
-      const messages = await Message.find({
-          $or: [
-              { senderId, receiverId },
-              { senderId: receiverId, receiverId: senderId }
-          ]
-      }).sort({ timestamp: 1 });
+    const messages = await Message.find({
+      $or: [
+        { senderId, receiverId },
+        { senderId: receiverId, receiverId: senderId }
+      ]
+    }).sort({ timestamp: 1 });
 
       // Fetch receiver details (name and profile picture)
       const receiver = await User.findById(receiverId).select('name profilePicture');
