@@ -299,6 +299,8 @@ export const trend = async (req, res, next) => {
 
 
 
+
+
 export const sub = async (req, res, next) => {
   try {
     const user = await User.findById(req.user.id);
@@ -413,7 +415,8 @@ export const copyUrl = async (req, res, next) => {
     if (!video) {
       return next(createError(404, "Video not found"));
     }
-    
+        // Extract the video URL
+
     // Extract the video URL
     const videoUrl = video.videoUrl;
 
