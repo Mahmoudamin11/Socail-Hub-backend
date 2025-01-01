@@ -5,6 +5,8 @@ import Comment from '../models/Comment.js';
 import Message from '../models/Message.js';
 import PremiumPlan from '../models/premiumPlanModel.js';
 import { createSystemNotificationForUser } from './notification.js';
+import mongoose from 'mongoose';
+import Report from '../models/Report.js'; // Assuming you have created the Report model
 
 // Function to get user by name
 const getUserByName = async (name) => {
@@ -92,7 +94,7 @@ export const report = async (req, res, next) => {
       const { hours, minutes } = getTimeUntilReset();
       return res.status(429).json({
         success: false,
-        message: `You have reached your daily report limit of ${reportLimit} reports. You can report again in ${hours} hours and ${minutes} minutes.`
+        message: `You have reached your daily report limit of ${reportLimit} reports. You can report again in ${hours} hours and ${minutes} minutes.`,
       });
     }
 
@@ -106,7 +108,7 @@ export const report = async (req, res, next) => {
     if (message_type === 'message') {
       const messages = await Message.find({
         senderId: user._id,
-        content: { $regex: `^${input_sentence.trim()}$`, $options: 'i' }
+        content: { $regex: `^${input_sentence.trim()}$`, $options: 'i' },
       });
       if (messages.length > 0) {
         isMessageFound = true;
@@ -118,7 +120,7 @@ export const report = async (req, res, next) => {
     if (message_type === 'comment' && !isMessageFound) {
       const comments = await Comment.find({
         userId: user._id,
-        desc: { $regex: `^${input_sentence.trim()}$`, $options: 'i' }
+        desc: { $regex: `^${input_sentence.trim()}$`, $options: 'i' },
       });
       if (comments.length > 0) {
         isMessageFound = true;
@@ -130,34 +132,80 @@ export const report = async (req, res, next) => {
       const { hours, minutes } = getTimeUntilReset();
       return res.status(400).json({
         success: false,
-        message: `Message or comment not found. You can try again in ${hours} hours and ${minutes} minutes.`
+        message: `Message or comment not found. You can try again in ${hours} hours and ${minutes} minutes.`,
       });
     }
 
     console.log("Executing Python script...");
-    exec(`python "${pythonScriptPath}" "${sexualWordsPath}" "${violenceWordsPath}" "${threatWordsPath}" "${input_sentence}"`, async (error, stdout, stderr) => {
-      if (error) {
-        console.error('Error processing report:', error);
-        return res.status(500).json({ success: false, message: 'Error processing report' });
+    exec(
+      `python "${pythonScriptPath}" "${sexualWordsPath}" "${violenceWordsPath}" "${threatWordsPath}" "${input_sentence}"`,
+      async (error, stdout, stderr) => {
+        if (error) {
+          console.error('Error processing report:', error);
+          return res.status(500).json({ success: false, message: 'Error processing report' });
+        }
+
+        const results = JSON.parse(stdout);
+        let deduction = 0;
+
+        results.forEach((result) => {
+          if (result[1] === 'Sexual') deduction += 300;
+          if (result[1] === 'Violence' || result[1] === 'Threat') deduction += 150;
+        });
+
+        // Save the report in the database
+const newReport = new Report({
+  user: req.user.id,
+  reportedUser: user._id,
+  content: input_sentence,
+  contentType: message_type,
+  reason: results.map((result) => result[1]).join(', '), // Combine all reasons
+  status: deduction > 0 ? 'reviewed' : 'pending',
+});
+
+        await newReport.save();
+
+        if (deduction > 0) {
+          deductCoins(user._id, deduction);
+          createSystemNotificationForUser(
+            user._id,
+            `Your content was flagged as inappropriate. ${deduction} coins were deducted.`
+          );
+        }
+
+        return res.status(200).json({ success: true, results, deduction });
       }
-
-      const results = JSON.parse(stdout);
-      let deduction = 0;
-
-      results.forEach(result => {
-        if (result[1] === 'Sexual') deduction += 300;
-        if (result[1] === 'Violence' || result[1] === 'Threat') deduction += 150;
-      });
-
-      if (deduction > 0) {
-        deductCoins(user._id, deduction);
-        createSystemNotificationForUser(user._id, `Your content was flagged as inappropriate. ${deduction} coins were deducted.`);
-      }
-
-      return res.status(200).json({ success: true, results, deduction });
-    });
+    );
   } catch (error) {
     console.error('Error processing report:', error);
     return res.status(500).json({ success: false, message: 'Error processing report' });
   }
 };
+
+
+// Function to get all reports made by the current user
+const getUserReports = async (req, res) => {
+  try {
+    const userId = req.user.id; // Retrieve the user ID from the authenticated request
+
+    // Fetch reports from the database where the user is the reporter
+    const userReports = await Report.find({ user: userId }).populate({
+      path: 'reportedUser',
+      select: 'name profilePicture',
+    });
+
+    // Return the reports to the client
+    return res.status(200).json({
+      success: true,
+      reports: userReports,
+    });
+  } catch (error) {
+    console.error('Error fetching user reports:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error fetching user reports',
+    });
+  }
+};
+
+export { getUserReports };

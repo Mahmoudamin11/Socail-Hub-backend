@@ -64,7 +64,8 @@ const UserSchema = new mongoose.Schema(
         likes: [mongoose.Schema.Types.ObjectId], 
         dislikes: [mongoose.Schema.Types.ObjectId], 
         postKey: String,
-
+        ownerName: String, // اسم صاحب الفيديو
+        ownerProfilePicture: String, // صورة بروفايل صاحب الفيديو
         createdAt: Date,                    
         updatedAt: Date,                   
       },

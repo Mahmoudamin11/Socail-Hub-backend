@@ -1,6 +1,7 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Community from '../models/Community.js';
+import globalIO from "../socket.js"; // افترض أن io يتم تصديره من ملف مخصص
 
 const notificationCache = new Map();
 
@@ -194,7 +195,6 @@ export const createNotificationForOwner = async (loggedInUserId, ownerId, messag
 
 export const createNotificationForUser = async (fromUserId, toUserId, message) => {
     try {
-        // Create a notification
         const notification = {
             message,
             FROM: fromUserId,
@@ -203,16 +203,15 @@ export const createNotificationForUser = async (fromUserId, toUserId, message) =
 
         const newNotification = await Notification.create(notification);
 
-        // Emit the notification to the target user via Socket.IO
+        // بث الإشعار للمستخدم المستهدف
         const userSocket = global.onlineUsers.get(toUserId);
         if (userSocket) {
-            global.chatSocket.to(userSocket).emit("new-notifications", [newNotification]);
+            globalIO.to(userSocket).emit("new-notification", newNotification);
         }
     } catch (error) {
-        console.error('Error creating notification for user:', error);
+        console.error("Error creating notification for user:", error);
     }
 };
-
 export const createSystemNotificationForUser = async (toUserId, message) => {
     try {
         // Create a notification from the system
