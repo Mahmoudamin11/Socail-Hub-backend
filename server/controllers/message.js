@@ -77,7 +77,7 @@ export const sendMessage = async (req, res, next) => {
 export const getConversation = async (req, res, next) => {
   try {
     const senderId = req.user.id; // Assuming req.user.id is the sender's ID from JWT
-    const receiverId = req.body.receiverId;
+    const receiverId = req.query.receiverId;
 
     const messages = await Message.find({
       $or: [

@@ -742,11 +742,10 @@ const isUserBlocked = async (senderId, receiverId) => {
 
 
 
-
 export const getRandomUsers = async (req, res, next) => {
   const userId = req.user.id; // ID of the current user
   const { page = 1 } = req.query; // Default to page 1
-  const pageSize = 10; // Number of users per page
+  const pageSize = 6; // Number of users per page
 
   try {
     // Get current user's data
@@ -759,19 +758,32 @@ export const getRandomUsers = async (req, res, next) => {
     const { friends } = currentUser;
 
     // Exclude friends and the current user from the search
-    const excludedIds = [...friends.map(friend => friend.toString()), userId.toString()];
+    const excludedIds = [
+      ...friends.map(friend => friend.toString()),
+      userId.toString(),
+    ];
+
+    // Validate and filter ObjectIds
+    const validExcludedIds = excludedIds.filter(id => mongoose.isValidObjectId(id));
 
     // Fetch random users
     const users = await User.aggregate([
       {
         $match: {
-          _id: { $nin: excludedIds.map(id => new mongoose.Types.ObjectId(id)) },
+          _id: {
+            $nin: validExcludedIds.map(id => new mongoose.Types.ObjectId(id)),
+          },
         },
       },
       {
         $addFields: {
           isFollower: {
-            $in: ["$_id", currentUser.SubscribersOrFollowers.map(id => new mongoose.Types.ObjectId(id))],
+            $in: [
+              "$_id",
+              currentUser.SubscribersOrFollowers
+                .filter(id => mongoose.isValidObjectId(id))
+                .map(id => new mongoose.Types.ObjectId(id)),
+            ],
           },
         },
       },
@@ -790,7 +802,7 @@ export const getRandomUsers = async (req, res, next) => {
       },
     ]);
 
-    // Process each user to determine `youFollow` and `sendFriendRequest`
+    // Process each user to determine youFollow and sendFriendRequest
     const processedUsers = users.map(user => ({
       ...user,
       youFollow: user.SubscribersOrFollowers.includes(userId), // Check if userId is in SubscribersOrFollowers
@@ -806,13 +818,13 @@ export const getRandomUsers = async (req, res, next) => {
       return res.status(404).json({ message: "No more users available." });
     }
 
+
     res.status(200).json({ success: true, users: sanitizedUsers });
   } catch (err) {
     console.error("Error in getRandomUsers:", err);
     next(err);
   }
 };
-
 
 
 
