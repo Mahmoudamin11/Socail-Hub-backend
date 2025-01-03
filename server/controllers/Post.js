@@ -257,7 +257,7 @@ export const savePost = async (req, res, next) => {
     }
 
     // Find the post by ID
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).populate('userId', 'name profilePicture');
     if (!post) {
       return next(createError(404, 'Post not found'));
     }
@@ -281,6 +281,9 @@ export const savePost = async (req, res, next) => {
       likes: post.likes,
       postKey: post.postKey,
       dislikes: post.dislikes,
+      ownerName: post.userId.name, // Add owner's name
+      ownerProfilePicture: post.userId.profilePicture, // Add owner's profile picture
+      ownerId: post.userId._id, // Add owner's ID
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     });
@@ -293,7 +296,7 @@ export const savePost = async (req, res, next) => {
 
     // Notify the owner of the post
     const notificationMessage = `${loggedInUserName} saved your post`;
-    await createNotificationForOwner(loggedInUserId, post.userId, notificationMessage);
+    await createNotificationForOwner(loggedInUserId, post.userId._id, notificationMessage);
 
     // Add a history record
     await addHistory(req.user.id, `You saved a post: ${post.title}`);
@@ -304,7 +307,6 @@ export const savePost = async (req, res, next) => {
     next(err);
   }
 };
-
 
 
 export const unsavePost = async (req, res, next) => {
