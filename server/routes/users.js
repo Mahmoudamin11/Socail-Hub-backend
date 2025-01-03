@@ -28,7 +28,7 @@ router.put("/:id", verifyToken, update);
 router.delete("/:id", verifyToken, deleteUser);
 
 // Get a user
-router.get("/find/:id", getUser);
+router.get("/find/:id", verifyToken,getUser);
 router.get("/getRandomUsers",verifyToken, getRandomUsers);
 
 router.get("/getMutual/:id",verifyToken, getMutualFriends);

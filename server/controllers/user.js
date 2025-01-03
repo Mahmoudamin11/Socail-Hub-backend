@@ -114,7 +114,15 @@ export const deleteUser = async (req, res, next) => {
 export const getUser = async (req, res, next) => {
   try {
     const user = await User.findById(req.params.id).select("-password");
-    res.status(200).json(user);
+    if (!user) {
+      return next(createError(404, "User not found"));
+    }
+
+    // Check if the logged-in user is in the friendRequests of the retrieved user
+    const loggedInUserId = req.user.id;
+    const sentRequest = user.friendRequests.some(request => request.sender.toString() === loggedInUserId);
+
+    res.status(200).json({ ...user.toObject(), sentRequest });
   } catch (err) {
     next(err);
   }
