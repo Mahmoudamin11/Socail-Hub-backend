@@ -91,17 +91,27 @@ export const deletePost = async (req, res, next) => {
   }
 };
 
-// Controller to fetch posts by user ID
 export const getPostsById = async (req, res, next) => {
   const userId = req.params.id;
 
   try {
     // Fetch posts sorted by createdAt in descending order (newest to oldest)
     const posts = await Post.find({ userId }).sort({ createdAt: -1 });
+
+    // Fetch the logged-in user to check saved posts
+    const loggedInUserId = req.user.id;
+    const user = await User.findById(loggedInUserId);
+
+    const postsWithSavedStatus = posts.map(post => {
+      const isSaved = user.savedPosts.some(savedItem => savedItem._id.toString() === post._id.toString());
+      return { ...post.toObject(), isSaved };
+    });
+
     if (!posts || posts.length === 0) {
       return res.status(404).json({ success: false, message: "No posts found for this user." });
     }
-    res.status(200).json({ success: true, posts });
+
+    res.status(200).json({ success: true, posts: postsWithSavedStatus });
   } catch (err) {
     console.error("Error fetching posts:", err.message);
     next(err); // Pass error to middleware
@@ -248,7 +258,7 @@ export const savePost = async (req, res, next) => {
     // Find the user by ID
     const user = await User.findById(loggedInUserId);
     if (!user) {
-      return next(createError(404, 'User not found'));
+      return next(createError(404, "User not found"));
     }
 
     // Check if user.savedPosts is defined
@@ -257,9 +267,9 @@ export const savePost = async (req, res, next) => {
     }
 
     // Find the post by ID
-    const post = await Post.findById(postId).populate('userId', 'name profilePicture');
+    const post = await Post.findById(postId).populate("userId", "name profilePicture");
     if (!post) {
-      return next(createError(404, 'Post not found'));
+      return next(createError(404, "Post not found"));
     }
 
     // Check if the post is already saved
@@ -267,7 +277,7 @@ export const savePost = async (req, res, next) => {
       (savedItem) => savedItem._id.toString() === postId
     );
     if (alreadySaved) {
-      return res.status(400).json({ success: false, message: 'Post already saved' });
+      return res.status(400).json({ success: false, message: "Post already saved" });
     }
 
     // Add the post data to the user's savedPosts array
@@ -281,9 +291,9 @@ export const savePost = async (req, res, next) => {
       likes: post.likes,
       postKey: post.postKey,
       dislikes: post.dislikes,
-      ownerName: post.userId.name, // Add owner's name
-      ownerProfilePicture: post.userId.profilePicture, // Add owner's profile picture
-      ownerId: post.userId._id, // Add owner's ID
+      ownerName: post.userId?.name || "Unknown Owner", // Add owner's name with fallback
+      ownerProfilePicture: post.userId?.profilePicture || "", // Add owner's profile picture with fallback
+      ownerId: post.userId?._id || null, // Add owner's ID with fallback
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
     });
@@ -295,18 +305,22 @@ export const savePost = async (req, res, next) => {
     const loggedInUserName = user.name;
 
     // Notify the owner of the post
-    const notificationMessage = `${loggedInUserName} saved your post`;
-    await createNotificationForOwner(loggedInUserId, post.userId._id, notificationMessage);
+    if (post.userId) {
+      const notificationMessage = `${loggedInUserName} saved your post`;
+      await createNotificationForOwner(loggedInUserId, post.userId._id, notificationMessage);
+    }
 
     // Add a history record
     await addHistory(req.user.id, `You saved a post: ${post.title}`);
 
-    res.status(200).json({ success: true, message: 'Post saved successfully' });
+    res.status(200).json({ success: true, message: "Post saved successfully" });
   } catch (err) {
     console.error("Error saving post:", err);
     next(err);
   }
 };
+
+
 
 
 export const unsavePost = async (req, res, next) => {

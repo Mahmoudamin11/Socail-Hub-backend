@@ -25,11 +25,11 @@ router.post("/", verifyToken,addPost);
 router.delete("/:id", verifyToken,deletePost);
 
 //get a user
-router.get("/find/:id", getPostsById);
+router.get("/find/:id", verifyToken,getPostsById);
 
 router.put("/:id",verifyToken,updatePost)
 
-router.get("/random/:id",random);
+router.get("/random/:id",verifyToken,random);
 router.post("/savePost/:id",verifyToken,savePost);
 router.post("/unsavePost/:id",verifyToken,unsavePost);
 
