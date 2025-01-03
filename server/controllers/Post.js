@@ -104,7 +104,9 @@ export const getPostsById = async (req, res, next) => {
 
     const postsWithSavedStatus = posts.map(post => {
       const isSaved = user.savedPosts.some(savedItem => savedItem._id.toString() === post._id.toString());
-      return { ...post.toObject(), isSaved };
+      const isLiked = post.likes.includes(loggedInUserId);
+      const isDisliked = post.dislikes.includes(loggedInUserId);
+      return { ...post.toObject(), isSaved, isLiked, isDisliked };
     });
 
     if (!posts || posts.length === 0) {
