@@ -1,7 +1,7 @@
 
 import express from "express";
 import { upload } from "../multerConfig.js"; // Import the upload variable from your Multer configuration file
-import { FindAllUsers,getVideoDetailsById, addVideo, uploadVideo, addView, copyUrl, deleteVideo, getByTag, getVideosByUser, random, search, sub, trend, updateVideo, saveVideo, unsaveVideo } from "../controllers/video.js";
+import { FindAllUsers,getVideoDetailsById, getSavedVideos,addVideo, uploadVideo, addView, copyUrl, deleteVideo, getByTag, getVideosByUser, random, search, sub, trend, updateVideo, saveVideo, unsaveVideo } from "../controllers/video.js";
 import { verifyToken } from "../verifyToken.js";
 
 
@@ -22,6 +22,7 @@ router.get("/spicificVideo/:id", getVideoDetailsById);
 router.get("/sub",verifyToken, sub)
 router.get("/FindAllUsers",verifyToken, FindAllUsers)
 router.get("/tags", getByTag)
+router.get("/getSavedVideos",verifyToken, getSavedVideos)
 router.get("/search", search)
 router.post("/save/:id", verifyToken,saveVideo)
 router.post("/unsave/:id",verifyToken, unsaveVideo)

@@ -96,8 +96,9 @@ export const getPostsById = async (req, res, next) => {
   const userId = req.params.id;
 
   try {
-    const posts = await Post.find({ userId });
-    if (!posts) {
+    // Fetch posts sorted by createdAt in descending order (newest to oldest)
+    const posts = await Post.find({ userId }).sort({ createdAt: -1 });
+    if (!posts || posts.length === 0) {
       return res.status(404).json({ success: false, message: "No posts found for this user." });
     }
     res.status(200).json({ success: true, posts });
@@ -333,6 +334,34 @@ export const unsavePost = async (req, res, next) => {
     next(err);
   }
 };
+
+
+export const getSavedPosts = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    // Fetch the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(createError(404, "User not found"));
+    }
+
+    
+
+    // Check if the user has saved posts
+    if (!user.savedPosts || user.savedPosts.length === 0) {
+      return res.status(404).json({ success: false, message: "No saved posts found." });
+    }
+
+    // Return the saved posts
+    res.status(200).json({ success: true, savedPosts: user.savedPosts });
+  } catch (err) {
+    console.error("Error fetching saved posts:", err);
+    next(err);
+  }
+};
+
+
 
 
 

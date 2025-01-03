@@ -11,6 +11,7 @@ import {
   savePost,
   unsavePost,
   copyUrl,
+  getSavedPosts
   
 } from "../controllers/Post.js";
 import { verifyToken } from "../verifyToken.js";
@@ -35,6 +36,7 @@ router.post("/unsavePost/:id",verifyToken,unsavePost);
 router.post("/:id/like", verifyToken, likePost);
 router.post("/:id/dislike", verifyToken, dislikePost);
 router.get("/:id/copyUrl", copyUrl);
+router.get("/getSavedPosts",verifyToken,getSavedPosts);
 
 
 //dislike a video

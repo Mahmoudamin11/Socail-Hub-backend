@@ -12,6 +12,7 @@ import mongoose from "mongoose";
 
 
 
+
 export const saveVideo = async (req, res, next) => {
   const userId = req.user.id;
   const videoId = req.params.id;
@@ -63,6 +64,7 @@ export const saveVideo = async (req, res, next) => {
       updatedAt: video.updatedAt,
       ownerName: videoOwner.name, // إضافة اسم صاحب الفيديو
       ownerProfilePicture: videoOwner.profilePicture, // إضافة صورة بروفايل صاحب الفيديو
+      ownerId: video.userId, // إضافة معرف صاحب الفيديو
     });
 
     // حفظ التحديثات في بيانات المستخدم
@@ -475,7 +477,28 @@ export const uploadVideo = async (req, res) => {
   }
 };
 
+export const getSavedVideos = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
 
+    // Fetch the user by ID
+    const user = await User.findById(userId);
+    if (!user) {
+      return next(createError(404, "User not found"));
+    }
+
+    // Check if the user has saved videos
+    if (!user.savedVideos || user.savedVideos.length === 0) {
+      return res.status(404).json({ success: false, message: "No saved videos found." });
+    }
+
+    // Return the saved videos
+    res.status(200).json({ success: true, savedVideos: user.savedVideos });
+  } catch (err) {
+    console.error("Error fetching saved videos:", err);
+    next(err);
+  }
+};
 
 
 
