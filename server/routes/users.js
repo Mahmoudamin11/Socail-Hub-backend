@@ -15,7 +15,8 @@ import {
   advancedUserSearch,
   getRandomUsers,
   getAllSavedItems,
-  rejectFriendRequest
+  rejectFriendRequest,
+  getUserFriendsInfo
 } from "../controllers/user.js";
 import { verifyToken } from "../verifyToken.js";
 
@@ -53,6 +54,7 @@ router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
 router.delete("/reject-request/:senderId",verifyToken, rejectFriendRequest);
 
 router.get("/saved-items", verifyToken, getAllSavedItems);
+router.get("/getUserFriendsInfo", verifyToken, getUserFriendsInfo);
 
 
 // Block user route
