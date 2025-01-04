@@ -420,7 +420,7 @@ export const acceptFriendRequest = async (req, res, next) => {
       return res.status(400).json("You cannot accept a friend request from yourself.");
     }
 
-    // جلب بيانات المستخدمين
+    // Fetch both users
     const user = await User.findById(userId).populate("friends.friendId", "friends name profilePicture");
     const sender = await User.findById(senderId).populate("friends.friendId", "friends name profilePicture");
 
@@ -428,16 +428,21 @@ export const acceptFriendRequest = async (req, res, next) => {
       return res.status(404).json("User or Sender not found.");
     }
 
-    // تحقق من وجود طلب الصداقة
-    const friendRequest = user.friendRequests.find((request) => request.sender.toString() === senderId);
-    if (!friendRequest) {
-      return res.status(404).json("Friend request not found.");
+    // Check if the friend request exists from the sender to the user
+    const friendRequestFromSender = user.friendRequests.find((request) => request.sender.toString() === senderId);
+    // Check if the friend request exists from the user to the sender
+    const friendRequestFromUser = sender.friendRequests.find((request) => request.sender.toString() === userId);
+
+    // If no valid friend request exists in either direction, return an error
+    if (!friendRequestFromSender && !friendRequestFromUser) {
+      return res.status(404).json("No friend request found between these users.");
     }
 
-    // إزالة طلب الصداقة
+    // Remove friend requests in both directions
     user.friendRequests = user.friendRequests.filter((request) => request.sender.toString() !== senderId);
+    sender.friendRequests = sender.friendRequests.filter((request) => request.sender.toString() !== userId);
 
-    // إضافة الأصدقاء
+    // Add each other as friends
     user.friends.push({
       friendId: sender._id,
       friendName: sender.name,
@@ -450,18 +455,19 @@ export const acceptFriendRequest = async (req, res, next) => {
       friendProfilePicture: user.profilePicture,
     });
 
-    // تحديث الأصدقاء المشتركين
+    // Update mutual friends
     await calculateAndUpdateMutualFriends(user, sender);
 
-    // حفظ التحديثات
+    // Save changes
     await Promise.all([user.save(), sender.save()]);
 
-    res.status(200).json("Friend request accepted successfully.");
+    res.status(200).json("Friend request accepted successfully, and mutual requests have been resolved.");
   } catch (err) {
     console.error("Error accepting friend request:", err);
     next(err);
   }
 };
+
 
 const calculateAndUpdateMutualFriends = async (user, friend) => {
   try {

@@ -98,6 +98,11 @@ export const getPostsById = async (req, res, next) => {
     // Fetch posts sorted by createdAt in descending order (newest to oldest)
     const posts = await Post.find({ userId }).sort({ createdAt: -1 });
 
+    // If no posts exist, return an empty array with success
+    if (!posts || posts.length === 0) {
+      return res.status(200).json({ success: true, posts: [] }); // Change: return empty array with success
+    }
+
     // Fetch the logged-in user to check saved posts
     const loggedInUserId = req.user.id;
     const user = await User.findById(loggedInUserId);
@@ -109,16 +114,13 @@ export const getPostsById = async (req, res, next) => {
       return { ...post.toObject(), isSaved, isLiked, isDisliked };
     });
 
-    if (!posts || posts.length === 0) {
-      return res.status(404).json({ success: false, message: "No posts found for this user." });
-    }
-
     res.status(200).json({ success: true, posts: postsWithSavedStatus });
   } catch (err) {
     console.error("Error fetching posts:", err.message);
     next(err); // Pass error to middleware
   }
 };
+
 
 
 export const random = async (req, res, next) => {
