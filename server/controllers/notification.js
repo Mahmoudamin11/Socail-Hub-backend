@@ -79,6 +79,9 @@ export const newNotifications = async (req, res) => {
     try {
         const userId = req.params.userId;
 
+        // Define `toUserId` to fix the error
+        const toUserId = userId; // Assign `userId` to `toUserId`
+
         // Fetch unread notifications
         const unreadNotifications = await Notification.find({ TO: userId, isRead: false })
             .sort({ createdAt: -1 });
@@ -89,11 +92,10 @@ export const newNotifications = async (req, res) => {
         }
 
         // Emit the unread notifications to the specific user via Socket.IO
-        const userSocket = global.onlineUsers.get(toUserId);
+        const userSocket = global.onlineUsers.get(toUserId); // Using `toUserId` as intended
         if (userSocket) {
-          globalIO.to(userSocket).emit("new-notification", newNotification);
+            globalIO.to(userSocket).emit("new-notification", unreadNotifications); // Emit the actual notifications
         }
-        
 
         // Return unread notifications
         res.status(200).json(unreadNotifications);
@@ -102,6 +104,7 @@ export const newNotifications = async (req, res) => {
         res.status(500).json({ message: 'Server Error' });
     }
 };
+
 
 
 export const sendNotificationsToCommunityMembers = async (communityId, newMemberId) => {
