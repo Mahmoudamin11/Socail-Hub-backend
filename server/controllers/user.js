@@ -929,7 +929,6 @@ export const getAllSavedItems = async (req, res, next) => {
 
 
 
-
 export const getUserFriendsInfo = async (req, res, next) => {
   const { userId } = req.params; // Extract userId from params
   const loggedInUserId = req.user.id; // Extract logged-in user's ID from token
@@ -945,13 +944,21 @@ export const getUserFriendsInfo = async (req, res, next) => {
       return next(createError(404, "User not found"));
     }
 
-    // Fetch the logged-in user's block list
-    const loggedInUser = await User.findById(loggedInUserId);
+    // Fetch the logged-in user's friends
+    const loggedInUser = await User.findById(loggedInUserId).populate("friends.friendId");
+
+    if (!loggedInUser) {
+      console.log("Logged-in user not found for ID:", loggedInUserId);
+      return next(createError(404, "Logged-in user not found"));
+    }
+
+    // Extract logged-in user's friends' IDs
+    const loggedInUserFriendIds = loggedInUser.friends.map((f) => f.friendId._id.toString());
 
     // Map friends data
     const friendsInfo = user.friends.map((friend) => {
       const isFriend = user.friends.some(
-        (f) => f.friendId && f.friendId.toString() === friend.friendId.toString()
+        (f) => f.friendId && f.friendId._id.toString() === friend.friendId._id.toString()
       );
 
       const sentRequest = friend.friendId?.friendRequests?.some(
@@ -959,7 +966,15 @@ export const getUserFriendsInfo = async (req, res, next) => {
       ) || false;
 
       // Check if the friend is blocked by the logged-in user
-      const isBlocked = loggedInUser.blockedUsers?.includes(friend.friendId?._id.toString()) || false;
+      const isBlocked = loggedInUser.blockedUsers?.includes(friend.friendId._id.toString()) || false;
+
+      // Extract this friend's friends' IDs
+      const thisFriendFriendIds = friend.friendId?.friends?.map((f) => f.friendId?.toString()) || [];
+
+      // Calculate the mutual friends and their IDs
+      const mutualFriends = thisFriendFriendIds.filter((id) =>
+        loggedInUserFriendIds.includes(id)
+      );
 
       return {
         friendId: friend.friendId?._id?.toString() || "",
@@ -968,6 +983,8 @@ export const getUserFriendsInfo = async (req, res, next) => {
         isFriend,
         sentRequest,
         isBlocked, // Reflect the true block status
+        mutualFriendsCount: mutualFriends.length, // Return the count of mutual friends
+        mutualFriendsIds: mutualFriends, // Return the IDs of mutual friends
       };
     });
 
