@@ -931,32 +931,38 @@ export const getAllSavedItems = async (req, res, next) => {
 
 
 export const getUserFriendsInfo = async (req, res, next) => {
-  try {
-    const { userId } = req.body; // User ID from JSON body
-    const loggedInUserId = req.user.id; // ID of the logged-in user
+  const { userId } = req.params; // Extract userId from params
+  const loggedInUserId = req.user.id; // Extract logged-in user's ID from token
 
-    // Find the user by ID and populate their friends
-    const user = await User.findById(userId).populate("friends.friendId", "name profilePicture");
+  try {
+    console.log("Received userId:", userId);
+
+    // Fetch the target user
+    const user = await User.findById(userId).populate("friends.friendId");
+
     if (!user) {
+      console.log("User not found for ID:", userId);
       return next(createError(404, "User not found"));
     }
 
-    // Fetch the logged-in user to check requests, blocks, and existing friends
-    const loggedInUser = await User.findById(loggedInUserId);
-    if (!loggedInUser) {
-      return next(createError(404, "Logged-in user not found"));
-    }
+    // Map friends data
+    const friendsInfo = user.friends.map((friend) => {
+      const isFriend = user.friends.some(
+        (f) => f.friendId && f.friendId.toString() === friend.friendId.toString()
+      );
 
-    // Build the response with friend info and status
-    const friendsInfo = user.friends.map(friend => {
-      const isFriend = loggedInUser.friends.some(f => f.friendId.toString() === friend.friendId._id.toString());
-      const sentRequest = loggedInUser.friendRequests.some(request => request.sender.toString() === friend.friendId._id.toString());
-      const isBlocked = loggedInUser.blockedUsers.includes(friend.friendId._id.toString());
+      const sentRequest = friend.friendId?.friendRequests?.some(
+        (request) => request.sender.toString() === loggedInUserId
+      ) || false;
+
+      const isBlocked = user.blockedUsers?.some(
+        (blockedId) => blockedId.toString() === friend.friendId?.toString()
+      ) || false;
 
       return {
-        friendId: friend.friendId._id,
-        name: friend.friendId.name,
-        profilePicture: friend.friendId.profilePicture,
+        friendId: friend.friendId?._id?.toString() || "",
+        name: friend.friendId?.name || "",
+        profilePicture: friend.friendId?.profilePicture || "",
         isFriend,
         sentRequest,
         isBlocked,
@@ -965,7 +971,8 @@ export const getUserFriendsInfo = async (req, res, next) => {
 
     res.status(200).json({ success: true, friends: friendsInfo });
   } catch (err) {
-    console.error("Error fetching user friends info:", err.message);
+    console.error("Error fetching friends info:", err.message);
     next(err);
   }
 };
+

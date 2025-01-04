@@ -54,7 +54,7 @@ router.put("/accept-request/:senderId", verifyToken, acceptFriendRequest);
 router.delete("/reject-request/:senderId",verifyToken, rejectFriendRequest);
 
 router.get("/saved-items", verifyToken, getAllSavedItems);
-router.get("/getUserFriendsInfo", verifyToken, getUserFriendsInfo);
+router.get("/getUserFriendsInfo/:userId", verifyToken, getUserFriendsInfo);
 
 
 // Block user route

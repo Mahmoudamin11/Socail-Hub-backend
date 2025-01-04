@@ -89,10 +89,11 @@ export const newNotifications = async (req, res) => {
         }
 
         // Emit the unread notifications to the specific user via Socket.IO
-        const userSocket = global.onlineUsers.get(userId);
+        const userSocket = global.onlineUsers.get(toUserId);
         if (userSocket) {
-            global.chatSocket.to(userSocket).emit("new-notifications", unreadNotifications);
+          globalIO.to(userSocket).emit("new-notification", newNotification);
         }
+        
 
         // Return unread notifications
         res.status(200).json(unreadNotifications);
