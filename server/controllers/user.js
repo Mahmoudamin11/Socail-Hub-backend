@@ -945,6 +945,9 @@ export const getUserFriendsInfo = async (req, res, next) => {
       return next(createError(404, "User not found"));
     }
 
+    // Fetch the logged-in user's block list
+    const loggedInUser = await User.findById(loggedInUserId);
+
     // Map friends data
     const friendsInfo = user.friends.map((friend) => {
       const isFriend = user.friends.some(
@@ -955,9 +958,8 @@ export const getUserFriendsInfo = async (req, res, next) => {
         (request) => request.sender.toString() === loggedInUserId
       ) || false;
 
-      const isBlocked = user.blockedUsers?.some(
-        (blockedId) => blockedId.toString() === friend.friendId?.toString()
-      ) || false;
+      // Check if the friend is blocked by the logged-in user
+      const isBlocked = loggedInUser.blockedUsers?.includes(friend.friendId?._id.toString()) || false;
 
       return {
         friendId: friend.friendId?._id?.toString() || "",
@@ -965,7 +967,7 @@ export const getUserFriendsInfo = async (req, res, next) => {
         profilePicture: friend.friendId?.profilePicture || "",
         isFriend,
         sentRequest,
-        isBlocked,
+        isBlocked, // Reflect the true block status
       };
     });
 
@@ -975,4 +977,3 @@ export const getUserFriendsInfo = async (req, res, next) => {
     next(err);
   }
 };
-
