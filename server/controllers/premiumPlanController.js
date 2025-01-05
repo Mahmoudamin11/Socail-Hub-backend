@@ -126,13 +126,15 @@ export const subscribePremiumPlan = async (req, res) => {
 const checkAndRemoveExpiredSubscriptions = async () => {
   try {
     const currentDate = new Date();
-    const expiredSubscriptions = await PremiumPlan.find({ expirationDate: { $lte: currentDate } });
+
+    // Add a timeout option to the query
+    const expiredSubscriptions = await PremiumPlan.find({ expirationDate: { $lte: currentDate } })
+      .maxTimeMS(5000); // Set query timeout to 5000ms
 
     if (expiredSubscriptions.length > 0) {
       // Remove expired subscriptions
       await PremiumPlan.deleteMany({ expirationDate: { $lte: currentDate } });
       console.log(`${expiredSubscriptions.length} expired subscriptions removed successfully.`);
-    } else {
     }
   } catch (error) {
     console.error('Error checking and removing expired subscriptions:', error);

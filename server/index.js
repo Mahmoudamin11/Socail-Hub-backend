@@ -53,7 +53,7 @@ app.use(session({
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // عنوان الفرونت إند
+    origin: "http://localhost:5173", 
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -166,7 +166,9 @@ app.post("/api/call", verifyToken, (req, res) => {
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
-  useUnifiedTopology: true,
+  useUnifiedTopology: true, 
+  serverSelectionTimeoutMS: 30000, // Increase server selection timeout
+  socketTimeoutMS: 45000, // Increase socket timeout
 }).then(() => {
   console.log("MongoDB connected");
   server.listen(PORT, () => {

@@ -753,40 +753,37 @@ const isUserBlocked = async (senderId, receiverId) => {
 
 
 
-
-
-
 export const getRandomUsers = async (req, res, next) => {
   const userId = req.user.id; // ID of the current user
   const { page = 1 } = req.query; // Default to page 1
   const pageSize = 6; // Number of users per page
 
   try {
-    // Get current user's data
+    // Fetch current user's data, including nested friends
     const currentUser = await User.findById(userId).select("friends SubscribersOrFollowers");
 
     if (!currentUser) {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const { friends } = currentUser;
+    // Extract friendIds from the friends array
+    const friendIds = currentUser.friends.map(friend => friend.friendId.toString());
 
-    // Exclude friends and the current user from the search
-    const excludedIds = [
-      ...friends.map(friend => friend.toString()),
-      userId.toString(),
-    ];
+    // Build exclusion list
+    const excludedIds = new Set([...friendIds, userId.toString()]);
 
-    // Validate and filter ObjectIds
-    const validExcludedIds = excludedIds.filter(id => mongoose.isValidObjectId(id));
 
-    // Fetch random users
+    // Ensure all excluded IDs are valid ObjectIds
+    const validExcludedIds = Array.from(excludedIds)
+      .filter(id => mongoose.isValidObjectId(id)) // Ensure valid IDs
+      .map(id => new mongoose.Types.ObjectId(id)); // Convert to ObjectId
+
+
+    // Fetch random users excluding friends and the current user
     const users = await User.aggregate([
       {
         $match: {
-          _id: {
-            $nin: validExcludedIds.map(id => new mongoose.Types.ObjectId(id)),
-          },
+          _id: { $nin: validExcludedIds }, // Exclude based on validExcludedIds
         },
       },
       {
@@ -816,6 +813,7 @@ export const getRandomUsers = async (req, res, next) => {
       },
     ]);
 
+
     // Process each user to determine youFollow and sendFriendRequest
     const processedUsers = users.map(user => ({
       ...user,
@@ -828,10 +826,10 @@ export const getRandomUsers = async (req, res, next) => {
     // Remove unnecessary fields from the final response
     const sanitizedUsers = processedUsers.map(({ SubscribersOrFollowers, friendRequests, ...rest }) => rest);
 
+
     if (!sanitizedUsers.length) {
       return res.status(404).json({ message: "No more users available." });
     }
-
 
     res.status(200).json({ success: true, users: sanitizedUsers });
   } catch (err) {
@@ -839,6 +837,9 @@ export const getRandomUsers = async (req, res, next) => {
     next(err);
   }
 };
+
+
+
 
 
 
