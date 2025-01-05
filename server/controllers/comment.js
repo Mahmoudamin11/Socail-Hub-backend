@@ -31,7 +31,7 @@ export const addComment = async (req, res, next) => {
       objectId,
       desc,
       replies: [], // Initialize with an empty replies array
-      category: category || "general", // Set category or default to "general"
+      category: "root", // Explicitly set the category to "root"
     });
 
     const savedComment = await newComment.save();
@@ -70,6 +70,7 @@ export const addComment = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 
@@ -212,6 +213,7 @@ export const getReplies = async (req, res, next) => {
     const transformReplies = (replies) =>
       replies.map((reply) => ({
         ...reply,
+        desc: reply.desc, // Include the description/content of the reply
         user: reply.userId ? transformUser(reply.userId) : null,
         replyTo: reply.replyTo
           ? {
@@ -274,10 +276,13 @@ export const deleteComment = async (req, res, next) => {
 
 export const getCommentsByObjectId = async (req, res, next) => {
   try {
-    const comments = await Comment.find({ objectId: req.params.objectId });
+    // Fetch comments for the specified objectId with category "root"
+    const comments = await Comment.find({ objectId: req.params.objectId, category: "root" });
+
     if (!comments || comments.length === 0) {
       return next(createError(404, 'No comments found for the specified objectId'));
     }
+
     res.status(200).json(comments);
   } catch (err) {
     next(err);
