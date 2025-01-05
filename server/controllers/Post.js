@@ -366,20 +366,34 @@ export const getSavedPosts = async (req, res, next) => {
       return next(createError(404, "User not found"));
     }
 
-    
-
     // Check if the user has saved posts
     if (!user.savedPosts || user.savedPosts.length === 0) {
       return res.status(404).json({ success: false, message: "No saved posts found." });
     }
 
+    // Fetch the saved posts with owner details
+    const savedPosts = await Post.find({ _id: { $in: user.savedPosts } })
+      .populate('userId', 'name profilePicture _id'); // Populate owner details
+
+    // Format the posts with owner information
+    const formattedPosts = savedPosts.map(post => ({
+      ...post.toObject(),
+      owner: {
+        id: post.userId?._id,
+        name: post.userId?.name,
+        profilePicture: post.userId?.profilePicture,
+      },
+    }));
+
     // Return the saved posts
-    res.status(200).json({ success: true, savedPosts: user.savedPosts });
+    res.status(200).json({ success: true, savedPosts: formattedPosts });
   } catch (err) {
     console.error("Error fetching saved posts:", err);
     next(err);
   }
 };
+
+
 
 
 

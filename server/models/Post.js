@@ -4,7 +4,8 @@ const { Schema } = mongoose;
 
 const postSchema = new Schema({
   userId: {
-    type: String,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
     required: true,
   },
   title: {
@@ -21,7 +22,8 @@ const postSchema = new Schema({
   },
   videoUrl: {
     type: String,
-  },
+  }, 
+ 
  
   tags: {
     type: [String],
