@@ -45,6 +45,23 @@ export const deductCoinsForPremiumPlan = async (userId, requiredCoins) => {
 
 
 
+export const activateGhostMode = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+
+    if (!user) throw createError(404, 'User not found.');
+
+    user.isGhost = true;
+    user.name = 'Mared'; // Default ghost mode name
+    user.phoneNumber = '000-000-0000'; // Default ghost mode number
+
+    await user.save();
+    console.log(`Ghost mode activated for user: ${userId}`);
+  } catch (error) {
+    console.error('Error activating ghost mode:', error);
+    throw error;
+  }
+};
 
 
 
@@ -126,13 +143,15 @@ export const subscribePremiumPlan = async (req, res) => {
 const checkAndRemoveExpiredSubscriptions = async () => {
   try {
     const currentDate = new Date();
-    const expiredSubscriptions = await PremiumPlan.find({ expirationDate: { $lte: currentDate } });
+
+    // Add a timeout option to the query
+    const expiredSubscriptions = await PremiumPlan.find({ expirationDate: { $lte: currentDate } })
+      .maxTimeMS(5000); // Set query timeout to 5000ms
 
     if (expiredSubscriptions.length > 0) {
       // Remove expired subscriptions
       await PremiumPlan.deleteMany({ expirationDate: { $lte: currentDate } });
       console.log(`${expiredSubscriptions.length} expired subscriptions removed successfully.`);
-    } else {
     }
   } catch (error) {
     console.error('Error checking and removing expired subscriptions:', error);

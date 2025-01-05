@@ -9,101 +9,64 @@ import { addHistory } from '../controllers/historyController.js'; // Import the 
 import { createNotificationForOwner } from './notification.js'; // Assuming you have the notification functions in a separate file
 
 export const addComment = async (req, res, next) => {
-  const { objectId, desc, replyTo } = req.body;
+  const { objectId, desc, category } = req.body; // Require objectId, desc, and optional category
   const userId = req.user.id;
-  const userName = await User.findById(userId);
 
   try {
-    let parentComment;
-    let newComment;
+    // Validate if the objectId corresponds to a video or a post
+    const video = await Video.findById(objectId);
+    const post = await Post.findById(objectId);
 
-    // Check if it's a reply and find the parent comment
-    if (replyTo) {
-      parentComment = await Comment.findById(replyTo);
-      if (!parentComment) {
-        return next(createError(404, 'Parent comment not found'));
-      }
-
-      let receiverId;
-      if (parentComment.objectType === 'video') {
-        const video = await Video.findById(parentComment.objectId);
-        if (video) {
-          receiverId = video.userId;
-        }
-      } else if (parentComment.objectType === 'post') {
-        const post = await Post.findById(parentComment.objectId);
-        if (post) {
-          receiverId = post.userId;
-        }
-      }
-
-      const isReceiverBlocked = await isUserBlocked(userId, receiverId);
-
-      if (isReceiverBlocked) {
-        return res.status(403).json({ success: false, message: 'Cannot add comment to blocked users' });
-      }
-
-      newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
-      parentComment.replies.push(newComment._id);
-      await parentComment.save();
-
-      const parentCommentOwner = await User.findById(parentComment.userId);
-      if (parentCommentOwner) {
-        const notificationMessage = ` ${userName.name} reply On Your Comment  : "${desc}"`;
-        await createNotificationForOwner(userId, parentCommentOwner._id, notificationMessage);
-      }
+    // If objectId is not valid for a video or post, return an error
+    if (!video && !post) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid objectId. Comments can only be added to valid videos or posts.",
+      });
     }
 
-    const video = await Video.findById(objectId);
+    // Create a new root comment
+    const newComment = new Comment({
+      userId,
+      objectId,
+      desc,
+      replies: [], // Initialize with an empty replies array
+      category: category || "general", // Set category or default to "general"
+    });
+
+    const savedComment = await newComment.save();
+
     if (video) {
-      if (!replyTo) {
-        newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
-        await addHistory(req.user.id, `You Added Reply On : "${video.title} (Video)"`);
-      }
-
-      const savedComment = await newComment.save();
-
-      video.comments.push(savedComment._id); // ربط التعليق بنموذج الفيديو
+      video.comments.push(savedComment._id);
       await video.save();
 
-      const notificationMessage = replyTo
-        ? `New Comment : ${desc}   By ${userName.name}`
-        : `New comment on your video: ${desc}   By ${userName.name}`;
-
+      await addHistory(userId, `You added a comment on video: "${video.title}"`);
+      const notificationMessage = `New comment on your video: "${desc}"`;
       await createNotificationForOwner(userId, video.userId, notificationMessage);
 
-      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined });
-      await fakeComment.save();
-
-      return res.status(200).json(savedComment);
+      return res.status(200).json({
+        success: true,
+        message: "Comment added to video successfully.",
+        comment: savedComment,
+      });
     }
 
-    const post = await Post.findById(objectId);
     if (post) {
-      if (!replyTo) {
-        newComment = new Comment({ userId, objectId, desc, replyTo: parentComment });
-        await addHistory(req.user.id, `You Added Comment On : "${post.title} (Post)"`);
-      }
-
-      const savedComment = await newComment.save();
-
-      post.comments.push(savedComment._id); // ربط التعليق بنموذج المنشورات
+      post.comments.push(savedComment._id);
       await post.save();
 
-      const notificationMessage = replyTo
-        ? `You have a reply on your comment: ${desc}   By ${userName.name}`
-        : `New comment on your post: ${desc}   By ${userName.name}`;
-
+      await addHistory(userId, `You added a comment on post: "${post.title}"`);
+      const notificationMessage = `New comment on your post: "${desc}"`;
       await createNotificationForOwner(userId, post.userId, notificationMessage);
 
-      const fakeComment = new FakeComment({ ...savedComment.toObject(), _id: undefined });
-      await fakeComment.save();
-
-      return res.status(200).json(savedComment);
+      return res.status(200).json({
+        success: true,
+        message: "Comment added to post successfully.",
+        comment: savedComment,
+      });
     }
-
-    return next(createError(404, 'Associated post or video not found'));
   } catch (err) {
+    console.error("Error adding comment:", err);
     next(err);
   }
 };
@@ -114,11 +77,162 @@ export const addComment = async (req, res, next) => {
 
 
 
+export const addReply = async (req, res, next) => {
+  const { commentId, desc } = req.body; // Require commentId and reply description
+  const userId = req.user.id;
+
+  try {
+    // Find the comment being replied to
+    const parentComment = await Comment.findById(commentId);
+    if (!parentComment) {
+      return res.status(404).json({ success: false, message: "Parent comment not found" });
+    }
+
+    // Check if the user being replied to is blocked
+    const receiverId = parentComment.userId;
+    const isReceiverBlocked = await isUserBlocked(userId, receiverId);
+    if (isReceiverBlocked) {
+      return res.status(403).json({ success: false, message: "Cannot reply to blocked users" });
+    }
+
+    // Create a new reply
+    const newReply = new Comment({
+      userId,
+      objectId: parentComment.objectId, // Keep the same objectId
+      desc,
+      replies: [], // Initialize with an empty array for nested replies
+      replyTo: parentComment._id, // Link to the parent comment
+    });
+
+    const savedReply = await newReply.save();
+
+    // Determine if the parent comment is a root or nested reply
+    if (!parentComment.replyTo) {
+      // Parent is a root comment
+      parentComment.replies.push(savedReply._id);
+      await parentComment.save();
+    } else {
+      // Parent is a nested reply
+      // Find the root comment
+      let rootComment = parentComment;
+      while (rootComment.replyTo) {
+        rootComment = await Comment.findById(rootComment.replyTo);
+        if (!rootComment) {
+          return res.status(404).json({ success: false, message: "Root comment not found" });
+        }
+      }
+
+      // Add reply to the parent and root comment
+      parentComment.replies.push(savedReply._id);
+      await parentComment.save();
+
+      rootComment.replies.push(savedReply._id);
+      await rootComment.save();
+    }
+
+    // Notify the owner of the parent comment
+    const parentCommentOwner = await User.findById(parentComment.userId);
+    if (parentCommentOwner) {
+      const notificationMessage = `${req.user.name} replied to your comment: "${desc}"`;
+      await createNotificationForOwner(userId, parentCommentOwner._id, notificationMessage);
+    }
+
+    // Add history for the user making the reply
+    await addHistory(userId, `You replied to a comment: "${desc}"`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Reply added successfully.",
+      reply: savedReply,
+    });
+  } catch (err) {
+    console.error("Error adding reply:", err);
+    next(err);
+  }
+};
 
 
 
 
+export const getReplies = async (req, res, next) => {
+  const { commentId } = req.params;
 
+  try {
+    // Find the root comment and populate replies, user details, and replyTo
+    const rootComment = await Comment.findById(commentId)
+      .populate({
+        path: 'replies',
+        populate: [
+          {
+            path: 'userId',
+            select: 'name profilePicture',
+          },
+          {
+            path: 'replies',
+            populate: [
+              {
+                path: 'userId',
+                select: 'name profilePicture',
+              },
+              {
+                path: 'replyTo',
+                populate: {
+                  path: 'userId',
+                  select: 'name',
+                },
+              },
+            ],
+          },
+          {
+            path: 'replyTo',
+            populate: {
+              path: 'userId',
+              select: 'name',
+            },
+          },
+        ],
+      })
+      .populate({
+        path: 'userId',
+        select: 'name profilePicture',
+      })
+      .lean(); // Convert the rootComment to a plain object
+
+    if (!rootComment) {
+      return res.status(404).json({ success: false, message: "Comment not found" });
+    }
+
+    // Transform the user data
+    const transformUser = (user) => ({
+      name: user.name,
+      profilePicture: user.profilePicture,
+    });
+
+    // Transform replies
+    const transformReplies = (replies) =>
+      replies.map((reply) => ({
+        ...reply,
+        user: reply.userId ? transformUser(reply.userId) : null,
+        replyTo: reply.replyTo
+          ? {
+              name: reply.replyTo.userId?.name || null, // Include the name of the user being replied to
+            }
+          : null,
+        replies: transformReplies(reply.replies || []),
+      }));
+
+    return res.status(200).json({
+      success: true,
+      message: "Replies fetched successfully.",
+      commentId: rootComment._id,
+      rootUser: rootComment.userId ? transformUser(rootComment.userId) : null,
+      replies: transformReplies(rootComment.replies || []),
+    });
+  } catch (err) {
+    console.error("Error fetching replies:", err);
+    next(err);
+  }
+};
 
 
 

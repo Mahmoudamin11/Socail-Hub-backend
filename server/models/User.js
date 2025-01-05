@@ -71,7 +71,18 @@ const UserSchema = new mongoose.Schema(
         updatedAt: Date,                   
       },
     ],
-  
+    isGhost: {
+      type: Boolean,
+      default: false,
+    },
+    ghostProfile: {
+      name: { type: String, default: null },
+      email: { type: String, default: null },
+      profilePicture: { type: String, default: null },
+      coverPicture: { type: String, default: null },
+
+    },
+    
     isAdmin: {
       type: Boolean,
       default: false,

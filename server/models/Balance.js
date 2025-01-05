@@ -12,7 +12,9 @@ const BalanceSchema = new mongoose.Schema(
     },
     currentCoins: {
       type: Number,
-      default: 35 ,
+      default: 85 ,
+      min: 0, // Ensures `currentCoins` cannot be negative
+
     }, 
     lastUpdated: {
       type: Date,
