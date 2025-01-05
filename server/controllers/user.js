@@ -963,37 +963,39 @@ export const getUserFriendsInfo = async (req, res, next) => {
     const loggedInUserFriendIds = loggedInUser.friends.map((f) => f.friendId._id.toString());
 
     // Map friends data
-    const friendsInfo = user.friends.map((friend) => {
-      const isFriend = user.friends.some(
-        (f) => f.friendId && f.friendId._id.toString() === friend.friendId._id.toString()
-      );
+    const friendsInfo = user.friends
+      .filter((friend) => friend.friendId?._id.toString() !== loggedInUserId) // Exclude the logged-in user
+      .map((friend) => {
+        const isFriend = user.friends.some(
+          (f) => f.friendId && f.friendId._id.toString() === friend.friendId._id.toString()
+        );
 
-      const sentRequest = friend.friendId?.friendRequests?.some(
-        (request) => request.sender.toString() === loggedInUserId
-      ) || false;
+        const sentRequest = friend.friendId?.friendRequests?.some(
+          (request) => request.sender.toString() === loggedInUserId
+        ) || false;
 
-      // Check if the friend is blocked by the logged-in user
-      const isBlocked = loggedInUser.blockedUsers?.includes(friend.friendId._id.toString()) || false;
+        // Check if the friend is blocked by the logged-in user
+        const isBlocked = loggedInUser.blockedUsers?.includes(friend.friendId._id.toString()) || false;
 
-      // Extract this friend's friends' IDs
-      const thisFriendFriendIds = friend.friendId?.friends?.map((f) => f.friendId?.toString()) || [];
+        // Extract this friend's friends' IDs
+        const thisFriendFriendIds = friend.friendId?.friends?.map((f) => f.friendId?.toString()) || [];
 
-      // Calculate the mutual friends and their IDs
-      const mutualFriends = thisFriendFriendIds.filter((id) =>
-        loggedInUserFriendIds.includes(id)
-      );
+        // Calculate the mutual friends and their IDs
+        const mutualFriends = thisFriendFriendIds.filter((id) =>
+          loggedInUserFriendIds.includes(id)
+        );
 
-      return {
-        friendId: friend.friendId?._id?.toString() || "",
-        name: friend.friendId?.name || "",
-        profilePicture: friend.friendId?.profilePicture || "",
-        isFriend,
-        sentRequest,
-        isBlocked, // Reflect the true block status
-        mutualFriendsCount: mutualFriends.length, // Return the count of mutual friends
-        mutualFriendsIds: mutualFriends, // Return the IDs of mutual friends
-      };
-    });
+        return {
+          friendId: friend.friendId?._id?.toString() || "",
+          name: friend.friendId?.name || "",
+          profilePicture: friend.friendId?.profilePicture || "",
+          isFriend,
+          sentRequest,
+          isBlocked, // Reflect the true block status
+          mutualFriendsCount: mutualFriends.length, // Return the count of mutual friends
+          mutualFriendsIds: mutualFriends, // Return the IDs of mutual friends
+        };
+      });
 
     res.status(200).json({ success: true, friends: friendsInfo });
   } catch (err) {
