@@ -68,6 +68,7 @@ io.on("connection", (socket) => {
 
   socket.on("add-user", (userId) => {
     if (userId) {
+      console.log("user added", userId);
       global.onlineUsers.set(userId, socket.id);
     }
   });
@@ -95,10 +96,13 @@ io.on("connection", (socket) => {
 
   // Handle messages
   socket.on("send-msg", (data) => {
+    console.log("send-msg", data);
     try {
       const sendUserSocket = global.onlineUsers.get(data.to);
       if (sendUserSocket) {
-        socket.to(sendUserSocket).emit("msg-recieve", data.msg);
+        console.log("sendUserSocket", sendUserSocket);
+        socket.to(sendUserSocket).emit("msg-recieve", data);
+        console.log("msg-recieve", data);
       }
     } catch (error) {
       console.error("Error handling send-msg:", error);
