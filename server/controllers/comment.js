@@ -31,7 +31,7 @@ export const addComment = async (req, res, next) => {
           objectId,
           desc,
           replies: [], // Initialize with an empty replies array
-          category: "root", // Explicitly set the category to "root"
+          category: category || "root", // Explicitly set the category or default to "root"
       });
 
       const savedComment = await newComment.save();
@@ -58,7 +58,7 @@ export const addComment = async (req, res, next) => {
           await addHistory(userId, `You added a comment on post: "${post.title}"`);
           const notificationMessage = `New comment on your post: "${desc}"`;
           await createNotificationForOwner(userId, post.userId, notificationMessage);
-s
+
           return res.status(200).json({
               success: true,
               message: "Comment added to post successfully.",
