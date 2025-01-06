@@ -118,15 +118,28 @@ export const getUser = async (req, res, next) => {
       return next(createError(404, "User not found"));
     }
 
-    // Check if the logged-in user is in the friendRequests of the retrieved user
+    // Get the logged-in user's ID
     const loggedInUserId = req.user.id;
-    const sentRequest = user.friendRequests.some(request => request.sender.toString() === loggedInUserId);
 
-    res.status(200).json({ ...user.toObject(), sentRequest });
+    // Check if the logged-in user is in the friendRequests of the retrieved user
+    const sentRequest = user.friendRequests.some(
+      (request) => request.sender.toString() === loggedInUserId
+    );
+
+    // Check if the logged-in user follows the retrieved user
+    const isFollowing = user.SubscribersOrFollowers.includes(loggedInUserId);
+
+    res.status(200).json({
+      ...user.toObject(),
+      sentRequest,
+      isFollowing, // This will be true if the user is a follower, false otherwise
+    });
   } catch (err) {
     next(err);
   }
 };
+
+
 
 
 

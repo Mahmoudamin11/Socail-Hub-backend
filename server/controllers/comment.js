@@ -228,13 +228,14 @@ export const getReplies = async (req, res, next) => {
       message: "Replies fetched successfully.",
       commentId: rootComment._id,
       rootUser: rootComment.userId ? transformUser(rootComment.userId) : null,
-      replies: transformReplies(rootComment.replies || []),
+      replies: rootComment.replies?.length > 0 ? transformReplies(rootComment.replies) : [], // Return empty array if no replies
     });
   } catch (err) {
     console.error("Error fetching replies:", err);
     next(err);
   }
 };
+
 
 
 
@@ -279,8 +280,9 @@ export const getCommentsByObjectId = async (req, res, next) => {
     // Fetch comments for the specified objectId with category "root"
     const comments = await Comment.find({ objectId: req.params.objectId, category: "root" });
 
+    // Return an empty array if no comments are found
     if (!comments || comments.length === 0) {
-      return next(createError(404, 'No comments found for the specified objectId'));
+      return res.status(200).json([]);
     }
 
     res.status(200).json(comments);
@@ -288,6 +290,7 @@ export const getCommentsByObjectId = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 
