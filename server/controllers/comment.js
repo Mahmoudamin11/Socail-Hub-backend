@@ -13,63 +13,64 @@ export const addComment = async (req, res, next) => {
   const userId = req.user.id;
 
   try {
-    // Validate if the objectId corresponds to a video or a post
-    const video = await Video.findById(objectId);
-    const post = await Post.findById(objectId);
+      // Validate if the objectId corresponds to a video or a post
+      const video = await Video.findById(objectId);
+      const post = await Post.findById(objectId);
 
-    // If objectId is not valid for a video or post, return an error
-    if (!video && !post) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid objectId. Comments can only be added to valid videos or posts.",
+      // If objectId is not valid for a video or post, return an error
+      if (!video && !post) {
+          return res.status(400).json({
+              success: false,
+              message: "Invalid objectId. Comments can only be added to valid videos or posts.",
+          });
+      }
+
+      // Create a new root comment
+      const newComment = new Comment({
+          userId,
+          objectId,
+          desc,
+          replies: [], // Initialize with an empty replies array
+          category: "root", // Explicitly set the category to "root"
       });
-    }
 
-    // Create a new root comment
-    const newComment = new Comment({
-      userId,
-      objectId,
-      desc,
-      replies: [], // Initialize with an empty replies array
-      category: "root", // Explicitly set the category to "root"
-    });
+      const savedComment = await newComment.save();
 
-    const savedComment = await newComment.save();
+      if (video) {
+          video.comments.push(savedComment._id);
+          await video.save();
 
-    if (video) {
-      video.comments.push(savedComment._id);
-      await video.save();
+          await addHistory(userId, `You added a comment on video: "${video.title}"`);
+          const notificationMessage = `New comment on your video: "${desc}"`;
+          await createNotificationForOwner(userId, video.userId, notificationMessage);
 
-      await addHistory(userId, `You added a comment on video: "${video.title}"`);
-      const notificationMessage = `New comment on your video: "${desc}"`;
-      await createNotificationForOwner(userId, video.userId, notificationMessage);
+          return res.status(200).json({
+              success: true,
+              message: "Comment added to video successfully.",
+              comment: savedComment,
+          });
+      }
 
-      return res.status(200).json({
-        success: true,
-        message: "Comment added to video successfully.",
-        comment: savedComment,
-      });
-    }
+      if (post) {
+          post.comments.push(savedComment._id);
+          await post.save();
 
-    if (post) {
-      post.comments.push(savedComment._id);
-      await post.save();
-
-      await addHistory(userId, `You added a comment on post: "${post.title}"`);
-      const notificationMessage = `New comment on your post: "${desc}"`;
-      await createNotificationForOwner(userId, post.userId, notificationMessage);
-
-      return res.status(200).json({
-        success: true,
-        message: "Comment added to post successfully.",
-        comment: savedComment,
-      });
-    }
+          await addHistory(userId, `You added a comment on post: "${post.title}"`);
+          const notificationMessage = `New comment on your post: "${desc}"`;
+          await createNotificationForOwner(userId, post.userId, notificationMessage);
+s
+          return res.status(200).json({
+              success: true,
+              message: "Comment added to post successfully.",
+              comment: savedComment,
+          });
+      }
   } catch (err) {
-    console.error("Error adding comment:", err);
-    next(err);
-  }
+      console.error("Error adding comment:", err);
+      next(err);
+  } 
 };
+
 
 
 
@@ -243,24 +244,39 @@ export const getReplies = async (req, res, next) => {
 
 export const deleteComment = async (req, res, next) => {
   try {
-    const commentId = req.params.id;
-    const comment = await Comment.findById(commentId);
-    if (!comment) {
-      return next(createError(404, 'Comment not found'));
-    }
+      const commentId = req.params.id;
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+          return next(createError(404, 'Comment not found'));
+      }
 
-   
-    // Check if the user is authorized to delete the comment
-    if (String(comment.userId) !== String(req.user.id)) {
-      return next(createError(403, 'You are Can Delete Only Your Comment  '));
-    }
+      // Check if the user is authorized to delete the comment
+      if (String(comment.userId) !== String(req.user.id)) {
+          return next(createError(403, 'You can only delete your own comment.'));
+      }
 
-    await Comment.findByIdAndDelete(commentId);
-    await addHistory(req.user.id, `You Delete Comment  : "${comment.desc} "`);
+      // Delete the comment from the Comment database
+      await Comment.findByIdAndDelete(commentId);
 
-    res.status(200).json({ message: 'Comment deleted successfully' });
+      // Remove the comment reference from the associated video or post
+      const video = await Video.findById(comment.objectId);
+      if (video) {
+          video.comments = video.comments.filter(id => String(id) !== commentId);
+          await video.save();
+      } else {
+          const post = await Post.findById(comment.objectId);
+          if (post) {
+              post.comments = post.comments.filter(id => String(id) !== commentId);
+              await post.save();
+          }
+      }
+
+      // Add a history entry for the deletion
+      await addHistory(req.user.id, `You deleted a comment: "${comment.desc}"`);
+
+      res.status(200).json({ message: 'Comment deleted successfully' });
   } catch (err) {
-    next(err);
+      next(err);
   }
 };
 
