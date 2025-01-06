@@ -58,19 +58,25 @@ export const updatePost = async (req, res, next) => {
   try {
     const founded = await Post.findById(req.params.id);
     if (!founded) return next(createError(404, "Post not found!"));
-    if (req.user.id === founded.userId) {
+
+    console.log("Authenticated User ID:", req.user.id);
+    console.log("Post Owner ID:", founded.userId);
+
+    // Convert req.user.id to ObjectId for comparison
+    if (mongoose.Types.ObjectId(req.user.id).equals(founded.userId)) {
       const updatedPost = await Post.findByIdAndUpdate(
         req.params.id,
         { $set: req.body },
-        { new: true }
+        { new: true } // Return the updated document
       );
-      res.status(200).json(updatedPost);
-      await addHistory(req.user.id, `You Updated Your Post : ${founded.title}`);
 
+      res.status(200).json(updatedPost);
+      await addHistory(req.user.id, `You Updated Your Post: ${founded.title}`);
     } else {
       return next(createError(403, "You can update only your Post!"));
     }
   } catch (err) {
+    console.error("Error in updatePost:", err.message);
     next(err);
   }
 };
