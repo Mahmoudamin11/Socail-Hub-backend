@@ -243,24 +243,39 @@ export const getReplies = async (req, res, next) => {
 
 export const deleteComment = async (req, res, next) => {
   try {
-    const commentId = req.params.id;
-    const comment = await Comment.findById(commentId);
-    if (!comment) {
-      return next(createError(404, 'Comment not found'));
-    }
+      const commentId = req.params.id;
+      const comment = await Comment.findById(commentId);
+      if (!comment) {
+          return next(createError(404, 'Comment not found'));
+      }
 
-   
-    // Check if the user is authorized to delete the comment
-    if (String(comment.userId) !== String(req.user.id)) {
-      return next(createError(403, 'You are Can Delete Only Your Comment  '));
-    }
+      // Check if the user is authorized to delete the comment
+      if (String(comment.userId) !== String(req.user.id)) {
+          return next(createError(403, 'You can only delete your own comment.'));
+      }
 
-    await Comment.findByIdAndDelete(commentId);
-    await addHistory(req.user.id, `You Delete Comment  : "${comment.desc} "`);
+      // Delete the comment from the Comment database
+      await Comment.findByIdAndDelete(commentId);
 
-    res.status(200).json({ message: 'Comment deleted successfully' });
+      // Remove the comment reference from the associated video or post
+      const video = await Video.findById(comment.objectId);
+      if (video) {
+          video.comments = video.comments.filter(id => String(id) !== commentId);
+          await video.save();
+      } else {
+          const post = await Post.findById(comment.objectId);
+          if (post) {
+              post.comments = post.comments.filter(id => String(id) !== commentId);
+              await post.save();
+          }
+      }
+
+      // Add a history entry for the deletion
+      await addHistory(req.user.id, `You deleted a comment: "${comment.desc}"`);
+
+      res.status(200).json({ message: 'Comment deleted successfully' });
   } catch (err) {
-    next(err);
+      next(err);
   }
 };
 
