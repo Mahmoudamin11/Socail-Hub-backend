@@ -36,6 +36,9 @@ export const addComment = async (req, res, next) => {
 
       const savedComment = await newComment.save();
 
+      // Get the user details
+      const user = await User.findById(userId).select('name profilePicture');
+
       if (video) {
           video.comments.push(savedComment._id);
           await video.save();
@@ -48,6 +51,11 @@ export const addComment = async (req, res, next) => {
               success: true,
               message: "Comment added to video successfully.",
               comment: savedComment,
+              user: {
+                  userId: userId,
+                  name: user.name,
+                  profilePicture: user.profilePicture,
+              },
           });
       }
 
@@ -63,6 +71,11 @@ export const addComment = async (req, res, next) => {
               success: true,
               message: "Comment added to post successfully.",
               comment: savedComment,
+              user: {
+                  userId: userId,
+                  name: user.name,
+                  profilePicture: user.profilePicture,
+              },
           });
       }
   } catch (err) {
@@ -79,19 +92,24 @@ export const addComment = async (req, res, next) => {
 
 
 
+
+
 export const addReply = async (req, res, next) => {
   const { commentId, desc } = req.body; // Require commentId and reply description
   const userId = req.user.id;
 
   try {
     // Find the comment being replied to
-    const parentComment = await Comment.findById(commentId);
+    const parentComment = await Comment.findById(commentId).populate({
+      path: 'userId',
+      select: 'name profilePicture',
+    });
     if (!parentComment) {
       return res.status(404).json({ success: false, message: "Parent comment not found" });
     }
 
     // Check if the user being replied to is blocked
-    const receiverId = parentComment.userId;
+    const receiverId = parentComment.userId._id;
     const isReceiverBlocked = await isUserBlocked(userId, receiverId);
     if (isReceiverBlocked) {
       return res.status(403).json({ success: false, message: "Cannot reply to blocked users" });
@@ -133,7 +151,7 @@ export const addReply = async (req, res, next) => {
     }
 
     // Notify the owner of the parent comment
-    const parentCommentOwner = await User.findById(parentComment.userId);
+    const parentCommentOwner = await User.findById(parentComment.userId._id);
     if (parentCommentOwner) {
       const notificationMessage = `${req.user.name} replied to your comment: "${desc}"`;
       await createNotificationForOwner(userId, parentCommentOwner._id, notificationMessage);
@@ -142,16 +160,30 @@ export const addReply = async (req, res, next) => {
     // Add history for the user making the reply
     await addHistory(userId, `You replied to a comment: "${desc}"`);
 
+    // Fetch user details
+    const user = await User.findById(userId).select('name profilePicture');
+
     return res.status(200).json({
       success: true,
       message: "Reply added successfully.",
       reply: savedReply,
+      user: {
+        userId: userId,
+        name: user.name,
+        profilePicture: user.profilePicture,
+      },
+      replyTo: {
+        id: parentComment._id,
+        name: parentComment.userId.name,
+      },
     });
   } catch (err) {
     console.error("Error adding reply:", err);
     next(err);
   }
 };
+
+
 
 
 
@@ -250,25 +282,26 @@ export const deleteComment = async (req, res, next) => {
           return next(createError(404, 'Comment not found'));
       }
 
-      // Check if the user is authorized to delete the comment
-      if (String(comment.userId) !== String(req.user.id)) {
-          return next(createError(403, 'You can only delete your own comment.'));
+      // Check if the user is authorized to delete the comment or if they are the owner of the associated video/post
+      const video = await Video.findById(comment.objectId);
+      const post = await Post.findById(comment.objectId);
+
+      const isOwnerOfObject = video ? String(video.userId) === String(req.user.id) : post ? String(post.userId) === String(req.user.id) : false;
+
+      if (String(comment.userId) !== String(req.user.id) && !isOwnerOfObject) {
+          return next(createError(403, 'You can only delete your own comment or comments on your video/post.'));
       }
 
       // Delete the comment from the Comment database
       await Comment.findByIdAndDelete(commentId);
 
       // Remove the comment reference from the associated video or post
-      const video = await Video.findById(comment.objectId);
       if (video) {
           video.comments = video.comments.filter(id => String(id) !== commentId);
           await video.save();
-      } else {
-          const post = await Post.findById(comment.objectId);
-          if (post) {
-              post.comments = post.comments.filter(id => String(id) !== commentId);
-              await post.save();
-          }
+      } else if (post) {
+          post.comments = post.comments.filter(id => String(id) !== commentId);
+          await post.save();
       }
 
       // Add a history entry for the deletion
@@ -279,6 +312,7 @@ export const deleteComment = async (req, res, next) => {
       next(err);
   }
 };
+
 
 //for Appeares Comments Under video
  
