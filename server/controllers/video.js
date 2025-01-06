@@ -236,16 +236,30 @@ export const addView = async (req, res, next) => {
 export const random = async (req, res, next) => {
   try {
       const limit = 12; // Number of videos to return per request
+      const page = parseInt(req.query.page, 10) || 1; // Get the page number from the query, default to 1
 
-      // Initialize returnedVideoIds in the session if not present
-      req.session.returnedVideoIds = req.session.returnedVideoIds || [];
+      if (page < 1) {
+          return res.status(400).json({ success: false, message: "Page number must be 1 or greater." });
+      }
 
-      // Fetch random videos excluding already returned ones
+      // Initialize session tracking for pages and returned videos if not present
+      req.session.pages = req.session.pages || {};
+
+      // Check if the page has already been fetched
+      if (req.session.pages[page]) {
+          const videoIds = req.session.pages[page];
+          const videos = await Video.find({ _id: { $in: videoIds } });
+          return res.status(200).json({ success: true, videos });
+      }
+
+      // Fetch random videos excluding videos from other pages
+      const excludedIds = Object.values(req.session.pages).flat();
+
       const videos = await Video.aggregate([
           {
               $match: {
                   _id: {
-                      $nin: req.session.returnedVideoIds.map(id => new mongoose.Types.ObjectId(id)),
+                      $nin: excludedIds.map(id => new mongoose.Types.ObjectId(id)),
                   },
               },
           },
@@ -256,11 +270,8 @@ export const random = async (req, res, next) => {
           return res.status(404).json({ success: false, message: "No more videos available." });
       }
 
-      // Add the returned video IDs to the session
-      req.session.returnedVideoIds = [
-          ...req.session.returnedVideoIds,
-          ...videos.map(video => video._id.toString()),
-      ];
+      // Save the video IDs for the current page in the session
+      req.session.pages[page] = videos.map(video => video._id.toString());
 
       res.status(200).json({ success: true, videos });
   } catch (err) {

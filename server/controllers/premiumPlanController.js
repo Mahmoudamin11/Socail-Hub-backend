@@ -224,7 +224,8 @@ const getPremiumPlanTypeForStatistics = async (userId) => {
   }
 };
 
-// Function to collect statistics and grant coins
+// F
+// unction to collect statistics and grant coins
 export const collectStatisticsAndGrantCoins = async (req, res) => {
   try {
     const userId = req.user.id; // Extract userId from req.user
