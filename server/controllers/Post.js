@@ -6,8 +6,9 @@ import { createNotificationForOwner } from './notification.js'; // Assuming you 
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
 import crypto from 'crypto'; // For generating unique keys
 import { encrypt } from './bycripting_algorithem.js'; // استدعاء ملف التشفير
+import mongoose from "mongoose";
 
-import mongoose from 'mongoose';
+
 
 import bcrypt from 'bcrypt';
 
@@ -78,19 +79,22 @@ export const deletePost = async (req, res, next) => {
   try {
     const founded = await Post.findById(req.params.id);
     if (!founded) return next(createError(404, "Post not found!"));
-    if (req.user.id === founded.userId) {
+
+
+    // Convert req.user.id to ObjectId for comparison
+    if (mongoose.Types.ObjectId(req.user.id).equals(founded.userId)) {
       await Post.findByIdAndDelete(req.params.id);
-      await addHistory(req.user.id, `You Deleted Your Post : ${founded.title}`);
+      await addHistory(req.user.id, `You Deleted Your Post: ${founded.title}`);
 
       res.status(200).json("The Post has been deleted.");
     } else {
       return next(createError(403, "You can delete only your Post!"));
     }
   } catch (err) {
+    console.error("Error in deletePost:", err.message);
     next(err);
   }
 };
-
 export const getPostsById = async (req, res, next) => {
   const userId = req.params.id;
 
