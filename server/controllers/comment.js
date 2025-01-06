@@ -13,77 +13,80 @@ export const addComment = async (req, res, next) => {
   const userId = req.user.id;
 
   try {
-      // Validate if the objectId corresponds to a video or a post
-      const video = await Video.findById(objectId);
-      const post = await Post.findById(objectId);
+    // Validate if the objectId corresponds to a video or a post
+    const video = await Video.findById(objectId);
+    const post = await Post.findById(objectId);
 
-      // If objectId is not valid for a video or post, return an error
-      if (!video && !post) {
-          return res.status(400).json({
-              success: false,
-              message: "Invalid objectId. Comments can only be added to valid videos or posts.",
-          });
-      }
-
-      // Create a new root comment
-      const newComment = new Comment({
-          userId,
-          objectId,
-          desc,
-          replies: [], // Initialize with an empty replies array
-          category: category || "root", // Explicitly set the category or default to "root"
+    // If objectId is not valid for a video or post, return an error
+    if (!video && !post) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid objectId. Comments can only be added to valid videos or posts.",
       });
+    }
 
-      const savedComment = await newComment.save();
+    // Create a new root comment
+    const newComment = new Comment({
+      userId,
+      objectId,
+      desc,
+      replies: [], // Initialize with an empty replies array
+      category: category || "root", // Explicitly set the category or default to "root"
+    });
 
-      // Get the user details
-      const user = await User.findById(userId).select('name profilePicture');
+    const savedComment = await newComment.save();
 
-      if (video) {
-          video.comments.push(savedComment._id);
-          await video.save();
+    // Populate user details for response
+    const user = await User.findById(userId).select('name profilePicture');
 
-          await addHistory(userId, `You added a comment on video: "${video.title}"`);
-          const notificationMessage = `New comment on your video: "${desc}"`;
-          await createNotificationForOwner(userId, video.userId, notificationMessage);
+    if (video) {
+      video.comments.push(savedComment._id);
+      await video.save();
 
-          return res.status(200).json({
-              success: true,
-              message: "Comment added to video successfully.",
-              comment: savedComment,
-              user: {
-                  userId: userId,
-                  name: user.name,
-                  profilePicture: user.profilePicture,
-              },
-          });
-      }
+      await addHistory(userId, `You added a comment on video: "${video.title}"`);
+      const notificationMessage = `New comment on your video: "${desc}"`;
+      await createNotificationForOwner(userId, video.userId, notificationMessage);
 
-      if (post) {
-          post.comments.push(savedComment._id);
-          await post.save();
+      return res.status(200).json({
+        success: true,
+        message: "Comment added to video successfully.",
+        comment: {
+          ...savedComment.toObject(),
+          userId: {
+            _id: userId,
+            name: user.name,
+            profilePicture: user.profilePicture,
+          },
+        },
+      });
+    }
 
-          await addHistory(userId, `You added a comment on post: "${post.title}"`);
-          const notificationMessage = `New comment on your post: "${desc}"`;
-          await createNotificationForOwner(userId, post.userId, notificationMessage);
+    if (post) {
+      post.comments.push(savedComment._id);
+      await post.save();
 
-          return res.status(200).json({
-              success: true,
-              message: "Comment added to post successfully.",
-              comment: savedComment,
-              user: {
-                  userId: userId,
-                  name: user.name,
-                  profilePicture: user.profilePicture,
-              },
-          });
-      }
+      await addHistory(userId, `You added a comment on post: "${post.title}"`);
+      const notificationMessage = `New comment on your post: "${desc}"`;
+      await createNotificationForOwner(userId, post.userId, notificationMessage);
+
+      return res.status(200).json({
+        success: true,
+        message: "Comment added to post successfully.",
+        comment: {
+          ...savedComment.toObject(),
+          userId: {
+            _id: userId,
+            name: user.name,
+            profilePicture: user.profilePicture,
+          },
+        },
+      });
+    }
   } catch (err) {
-      console.error("Error adding comment:", err);
-      next(err);
-  } 
+    console.error("Error adding comment:", err);
+    next(err);
+  }
 };
-
 
 
 
