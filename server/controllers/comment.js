@@ -278,7 +278,11 @@ export const deleteComment = async (req, res, next) => {
 export const getCommentsByObjectId = async (req, res, next) => {
   try {
     // Fetch comments for the specified objectId with category "root"
-    const comments = await Comment.find({ objectId: req.params.objectId, category: "root" });
+    const comments = await Comment.find({ objectId: req.params.objectId, category: "root" })
+      .populate({
+        path: 'userId', // Assuming the field that links to the user is 'userId'
+        select: 'name profilePicture', // Only include name and profilePicture from User
+      });
 
     // Return an empty array if no comments are found
     if (!comments || comments.length === 0) {
