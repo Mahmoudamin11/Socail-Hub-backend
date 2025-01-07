@@ -248,8 +248,9 @@ export const getReplies = async (req, res, next) => {
     // Transform replies
     const transformReplies = (replies) =>
       replies.map((reply) => ({
-        ...reply,
+        objectId: reply._id,
         desc: reply.desc, // Include the description/content of the reply
+        category: reply.category || "General", // Default to General if category is not provided
         user: reply.userId ? transformUser(reply.userId) : null,
         replyTo: reply.replyTo
           ? {
@@ -271,6 +272,7 @@ export const getReplies = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 
