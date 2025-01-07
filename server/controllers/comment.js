@@ -248,8 +248,9 @@ export const getReplies = async (req, res, next) => {
     // Transform replies
     const transformReplies = (replies) =>
       replies.map((reply) => ({
-        ...reply,
+        category: reply.category || "General", // Default category if not provided
         desc: reply.desc, // Include the description/content of the reply
+        objectId: reply._id, // Include the ID as objectId
         user: reply.userId ? transformUser(reply.userId) : null,
         replyTo: reply.replyTo
           ? {
@@ -262,8 +263,10 @@ export const getReplies = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Replies fetched successfully.",
-      commentId: rootComment._id,
-      rootUser: rootComment.userId ? transformUser(rootComment.userId) : null,
+      category: rootComment.category || "General", // Include category for root comment
+      desc: rootComment.desc, // Description of the root comment
+      objectId: rootComment._id,
+      user: rootComment.userId ? transformUser(rootComment.userId) : null,
       replies: rootComment.replies?.length > 0 ? transformReplies(rootComment.replies) : [], // Return empty array if no replies
     });
   } catch (err) {
@@ -271,6 +274,7 @@ export const getReplies = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
 
