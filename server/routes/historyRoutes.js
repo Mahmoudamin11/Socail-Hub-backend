@@ -10,6 +10,6 @@ const router = express.Router();
 router.post('/add', verifyToken, addHistory);
 
 // Get usage history
-router.get('/getmyhistory/:year/:month/:day', verifyToken, getUserHistory);
+router.get('/getmyhistory', verifyToken, getUserHistory);
 
 export default router;

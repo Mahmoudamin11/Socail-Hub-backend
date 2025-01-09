@@ -28,8 +28,8 @@ export const getUserHistory = async (req, res, next) => {
       });
     }
 
-    // Extract date from request params
-    const { day, month, year } = req.params;
+    // Extract date from request body
+    const { day, month, year } = req.body;
 
     // Validate that date is provided
     if (!day || !month || !year) {
@@ -39,22 +39,9 @@ export const getUserHistory = async (req, res, next) => {
       });
     }
 
-    // Convert day, month, and year to numbers for constructing Date
-    const parsedDay = parseInt(day, 10);
-    const parsedMonth = parseInt(month, 10);
-    const parsedYear = parseInt(year, 10);
-
-    // Validate that the parsed values are valid numbers
-    if (isNaN(parsedDay) || isNaN(parsedMonth) || isNaN(parsedYear)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid day, month, or year format!",
-      });
-    }
-
     // Construct the start and end dates for filtering
-    const startDate = new Date(parsedYear, parsedMonth - 1, parsedDay, 0, 0, 0); // Start of the day
-    const endDate = new Date(parsedYear, parsedMonth - 1, parsedDay, 23, 59, 59); // End of the day
+    const startDate = new Date(year, month - 1, day, 0, 0, 0); // Start of the day
+    const endDate = new Date(year, month - 1, day, 23, 59, 59); // End of the day
 
     // Query the database for history entries for the user on the specified date
     const history = await History.find({
@@ -80,7 +67,5 @@ export const getUserHistory = async (req, res, next) => {
     next(error);
   }
 };
-
-
 
 // Other CRUD operations as needed
