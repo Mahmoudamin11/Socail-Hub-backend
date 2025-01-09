@@ -88,6 +88,23 @@ export const sendMessage = async (req, res, next) => {
       });
       await message.save();
 
+      // ** Add additional updates here **
+      // Save the message to the sender's message history
+      await Message.create({
+        senderId,
+        receiverId,
+        content,
+        photoUrl,
+        videoUrl,
+        type: 'chat',
+        status: 'sent', // Add a status field for tracking
+      });
+
+      // Update the receiver's message inbox
+      await User.findByIdAndUpdate(receiverId, {
+        $push: { inbox: message._id },
+      });
+
       // Add history for the direct message
       await addHistory(senderId, `Sent a message to user ${receiverName}`);
 
@@ -101,6 +118,7 @@ export const sendMessage = async (req, res, next) => {
     }
   });
 };
+
 
 
 export const getConversation = async (req, res, next) => {
