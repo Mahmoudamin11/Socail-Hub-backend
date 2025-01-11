@@ -275,6 +275,7 @@ export const googleAuth = async (req, res, next) => {
         email,
         fromGoogle: true,
         profilePicture: img,
+        password: "", 
       });
       await user.save();
 
@@ -326,6 +327,7 @@ export const googleAuth = async (req, res, next) => {
     next(err);
   }
 };
+
 
 export const sendPasscode = async (req, res, next) => {
   const { email } = req.body;
