@@ -112,16 +112,20 @@ export const sendMessage = async (req, res, next) => {
 
 export const getConversation = async (req, res, next) => {
   try {
-    const communityId = req.query.communityId;
+    const userId = req.user.id; // Assuming req.user.id is the sender's ID from JWT
+    const receiverId = req.params.receiverId; // Receiver ID from route parameters
 
-    if (!communityId) {
-      return res.status(400).json({ success: false, message: 'CommunityId is required' });
+    if (!receiverId) {
+      return res.status(400).json({ success: false, message: 'ReceiverId is required' });
     }
 
-    // Fetch all messages for the community
+    // Fetch all messages between the user and the specified receiver
     const messages = await Message.find({
-      receiverId: communityId,
-      type: 'community',
+      type: 'chat', // Ensure we are only getting chat messages
+      $or: [
+        { senderId: userId, receiverId: receiverId },
+        { senderId: receiverId, receiverId: userId }
+      ]
     }).sort({ timestamp: 1 });
 
     // Fetch details for each sender
@@ -149,6 +153,7 @@ export const getConversation = async (req, res, next) => {
     next(error);
   }
 };
+
 
 
 
