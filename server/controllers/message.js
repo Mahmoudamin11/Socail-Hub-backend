@@ -32,7 +32,7 @@ const isUserBlocked = async (senderId, receiverId) => {
 
 
 
-export const sendMessage = (io) => async (req, res, next) => {
+export const sendMessage = async (req, res, next) => {
   upload.single('media')(req, res, async (err) => {
     if (err) {
       console.error(err); // Log the error for debugging
@@ -86,31 +86,6 @@ export const sendMessage = (io) => async (req, res, next) => {
         videoUrl,
         type: 'chat',
         status: 'sent', // Add a status field for tracking
-<<<<<<< HEAD
-=======
-      });
-      await message.save();
-
-      // Emit the message to the sender and receiver
-      io.to(senderId).emit('privateMessage', {
-        senderId,
-        receiverId,
-        content,
-        photoUrl,
-        videoUrl,
-        type: 'chat',
-        createdAt: message.createdAt,
-      });
-      
-      io.to(receiverId).emit('privateMessage', {
-        senderId,
-        receiverId,
-        content,
-        photoUrl,
-        videoUrl,
-        type: 'chat',
-        createdAt: message.createdAt,
->>>>>>> 237fbefd247a30dfec9277da8dbd360f3658e04a
       });
       await message.save();
 
@@ -222,112 +197,61 @@ const getCommunityMembers = async (communityId) => {
   return community ? community.members : [];
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-export const sendCommunityMessage = (io) => async (req, res, next) => {
+export const sendCommunityMessage = async (req, res, next) => {
   upload.single('media')(req, res, async (err) => {
-    if (err) {
-      return next(createError(500, 'File upload failed'));
-    }
-
-    try {
-      const { communityId, content } = req.body;
-      const senderId = req.user.id;
-      let photoUrl = null;
-      let videoUrl = null;
-
-      if (!communityId || !content || !senderId) {
-        return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
+      if (err) {
+          return next(createError(500, 'File upload failed'));
       }
 
-      if (req.file) {
-        const fileExtension = path.extname(req.file.filename).toLowerCase();
-        if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
-          photoUrl = req.file.path;
-        } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
-          videoUrl = req.file.path;
-        }
+      try {
+          const { communityId, content } = req.body;
+          const senderId = req.user.id;
+          let photoUrl = null;
+          let videoUrl = null;
+
+          if (!communityId || !content || !senderId) {
+              return res.status(400).json({ success: false, message: 'CommunityId, content, and senderId are required' });
+          }
+
+          if (req.file) {
+              const fileExtension = path.extname(req.file.filename).toLowerCase();
+              if (fileExtension === '.jpg' || fileExtension === '.jpeg' || fileExtension === '.png') {
+                  photoUrl = req.file.path;
+              } else if (fileExtension === '.mp4' || fileExtension === '.mov') {
+                  videoUrl = req.file.path;
+              }
+          }
+
+          // Verify the community exists
+          const community = await Community.findById(communityId);
+
+          if (!community) {
+              return res.status(404).json({
+                  success: false,
+                  message: 'Community not found',
+              });
+          }
+
+          // Save the community message with receiverId as communityId
+          const message = new Message({
+              senderId,
+              receiverId: communityId, // Set receiverId to communityId
+              content,
+              photoUrl,
+              videoUrl,
+              type: 'community',
+          });
+          await message.save();
+
+          res.status(201).json({
+              success: true,
+              message: 'Community message sent successfully',
+          });
+      } catch (error) {
+          next(error);
       }
-
-      // Verify the community exists
-      const community = await Community.findById(communityId);
-
-      if (!community) {
-        return res.status(404).json({
-          success: false,
-          message: 'Community not found',
-        });
-      }
-
-      // Save the community message with receiverId as communityId
-      const message = new Message({
-        senderId,
-        receiverId: communityId, // Set receiverId to communityId
-        content,
-        photoUrl,
-        videoUrl,
-        type: 'community',
-      });
-      await message.save();
-
-      // Emit the message to all connected clients
-      io.to(communityId).emit('communityMessage', {
-        senderId,
-        communityId,
-        content,
-        photoUrl,
-        videoUrl,
-        type: 'community',
-        createdAt: message.createdAt,
-      });
-
-      // Add history for the community message
-      await addHistory(senderId, `Sent a message to community ${community.name}`);
-
-      // Notify all community members (example, adjust as needed)
-      const notificationMessage = `${sender.name} posted in ${community.name}: "${content}"`;
-      await createNotificationForUser(senderId, communityId, notificationMessage);
-
-      res.status(201).json({
-        success: true,
-        message: 'Community message sent successfully',
-      });
-    } catch (error) {
-      next(error);
-    }
   });
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 export const getUsersWithChatMessages = async (req, res, next) => {
   try {
