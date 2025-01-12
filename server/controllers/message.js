@@ -175,7 +175,7 @@ export const markMessageAsRead = async (req, res, next) => {
 
 export const getGroupConversations = async (req, res, next) => {
   try {
-      const { groupId } = req.body; // Assuming groupId is passed as a query parameter
+      const { groupId } = req.query; // Assuming groupId is passed as a query parameter
 
       if (!groupId) {
           return res.status(400).json({ message: 'groupId is required in the request query' });
@@ -288,9 +288,12 @@ export const getUsersWithChatMessages = async (req, res, next) => {
       return res.status(400).json({ message: "User ID is required" });
     }
 
-    // Find messages where the user is either the sender or receiver
+    // Find chat messages where the user is either the sender or receiver
     const userMessages = await Message.find({
-      $or: [{ senderId: userId }, { receiverId: userId }],
+      $and: [
+        { $or: [{ senderId: userId }, { receiverId: userId }] },
+        { type: 'chat' }
+      ],
     })
       .sort({ timestamp: -1 }) // Sort by latest messages first
       .exec();
@@ -314,34 +317,14 @@ export const getUsersWithChatMessages = async (req, res, next) => {
       }
     });
 
-    // Process the map to fetch user or community details
+    // Process the map to fetch user details
     const processedMessages = await Promise.all(
       Array.from(userMap.entries()).map(async ([otherUserId, message]) => {
-        // Try to find the otherUserId in the User model
         const user = await User.findById(otherUserId).select('name profilePicture');
-        if (user) {
-          return {
-            ...message._doc,
-            receiverName: user.name,
-            receiverProfilePicture: user.profilePicture,
-          };
-        }
-
-        // If not found in User model, try the Community model
-        const community = await Community.findById(otherUserId).select('name');
-        if (community) {
-          return {
-            ...message._doc,
-            receiverName: community.name,
-            receiverProfilePicture: null, // Communities don't have profile pictures
-          };
-        }
-
-        // If otherUserId is not found in either model
         return {
           ...message._doc,
-          receiverName: "Unknown Receiver",
-          receiverProfilePicture: null,
+          receiverName: user?.name || "Unknown Receiver",
+          receiverProfilePicture: user?.profilePicture || null,
         };
       })
     );
