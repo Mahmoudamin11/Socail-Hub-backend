@@ -112,31 +112,44 @@ export const sendMessage = async (req, res, next) => {
 
 export const getConversation = async (req, res, next) => {
   try {
-    const senderId = req.user.id; // Assuming req.user.id is the sender's ID from JWT
-    const receiverId = req.query.receiverId;
+    const communityId = req.query.communityId;
 
+    if (!communityId) {
+      return res.status(400).json({ success: false, message: 'CommunityId is required' });
+    }
+
+    // Fetch all messages for the community
     const messages = await Message.find({
-      $or: [
-        { senderId, receiverId },
-        { senderId: receiverId, receiverId: senderId }
-      ]
+      receiverId: communityId,
+      type: 'community',
     }).sort({ timestamp: 1 });
 
-      // Fetch receiver details (name and profile picture)
-      const receiver = await User.findById(receiverId).select('name profilePicture');
+    // Fetch details for each sender
+    const senderIds = messages.map((message) => message.senderId);
+    const senders = await User.find({ _id: { $in: senderIds } }).select('name profilePicture');
 
-      // Process messages to include receiver details
-      const processedMessages = messages.map((message) => ({
-          ...message._doc,
-          receiverName: receiver?.name || "Unknown Receiver",
-          receiverProfilePicture: receiver?.profilePicture || null,
-      }));
+    // Create a mapping of senderId to sender details
+    const senderDetailsMap = senders.reduce((map, sender) => {
+      map[sender._id] = sender;
+      return map;
+    }, {});
 
-      res.json(processedMessages);
+    // Process messages to include sender details
+    const processedMessages = messages.map((message) => ({
+      ...message._doc,
+      senderName: senderDetailsMap[message.senderId]?.name || 'Unknown Sender',
+      senderProfilePicture: senderDetailsMap[message.senderId]?.profilePicture || null,
+    }));
+
+    res.json({
+      success: true,
+      messages: processedMessages,
+    });
   } catch (error) {
-      next(error);
+    next(error);
   }
 };
+
 
 
 export const markMessageAsRead = async (req, res, next) => {
@@ -162,14 +175,14 @@ export const markMessageAsRead = async (req, res, next) => {
 
 export const getGroupConversations = async (req, res, next) => {
   try {
-      const { groupId } = req.body; // Assuming groupId is passed in the JSON body
+      const { groupId } = req.body; // Assuming groupId is passed as a query parameter
 
       if (!groupId) {
-          return res.status(400).json({ message: 'groupId is required in the request body' });
+          return res.status(400).json({ message: 'groupId is required in the request query' });
       }
 
       // Fetch all community messages for the specified group
-      const messages = await Message.find({ groupId, type: 'community' }).sort({ timestamp: 1 });
+      const messages = await Message.find({ receiverId: groupId, type: 'community' }).sort({ timestamp: 1 });
 
       // Fetch sender details (name and profile picture) for each message
       const processedMessages = await Promise.all(
@@ -183,7 +196,10 @@ export const getGroupConversations = async (req, res, next) => {
           })
       );
 
-      res.json(processedMessages);
+      res.json({
+          success: true,
+          messages: processedMessages,
+      });
   } catch (error) {
       next(error);
   }
@@ -196,6 +212,8 @@ const getCommunityMembers = async (communityId) => {
   const community = await Community.findById(communityId);
   return community ? community.members : [];
 };
+
+
 
 export const sendCommunityMessage = async (req, res, next) => {
   upload.single('media')(req, res, async (err) => {
@@ -243,15 +261,24 @@ export const sendCommunityMessage = async (req, res, next) => {
           });
           await message.save();
 
+          // Add the message ID to the community's messages array
+          community.messages.push(message._id);
+          await community.save();
+
           res.status(201).json({
               success: true,
               message: 'Community message sent successfully',
+              data: message,
           });
       } catch (error) {
           next(error);
       }
   });
 };
+
+
+
+
 
 export const getUsersWithChatMessages = async (req, res, next) => {
   try {

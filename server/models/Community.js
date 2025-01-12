@@ -19,13 +19,14 @@ const CommunitySchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    messages: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Message',
+      },
+    ],
   },
   { timestamps: true }
 );
 
 export default mongoose.model('Community', CommunitySchema);
-
-
-
-
-
