@@ -275,7 +275,6 @@ export const googleAuth = async (req, res, next) => {
         email,
         fromGoogle: true,
         profilePicture: img,
-        password: "", 
       });
       await user.save();
 

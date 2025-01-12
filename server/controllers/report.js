@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import Balance from '../models/Balance.js';
 import Comment from '../models/Comment.js';
 import Message from '../models/Message.js';
+import Post from '../models/Post.js'; // Import the Post model
 import PremiumPlan from '../models/premiumPlanModel.js';
 import { createSystemNotificationForUser } from './notification.js';
 import mongoose from 'mongoose';
@@ -15,7 +16,6 @@ const getUserByName = async (name) => {
   return await User.findOne({ name });
 };
 
-
 export const addCoins = async (userId, amount) => {
   try {
     const user = await User.findById(userId);
@@ -23,7 +23,7 @@ export const addCoins = async (userId, amount) => {
       throw new Error('User not found');
     }
 
-    user.coins = (user.coins || 0) + amount; // إضافة العملات
+    user.coins = (user.coins || 0) + amount; // Adding coins
     await user.save();
   } catch (error) {
     console.error(`Failed to add coins to user ${userId}:`, error.message);
@@ -76,11 +76,6 @@ const getTimeUntilReset = () => {
 
   return { hours, minutes };
 };
-
-
-
-
-
 
 
 export const report = async (req, res, next) => {
@@ -212,6 +207,7 @@ export const report = async (req, res, next) => {
     return res.status(500).json({ success: false, message: 'Error processing report' });
   }
 };
+
 
 
 
