@@ -214,12 +214,21 @@ export const getNotificationsByUser = async (req, res) => {
     try {
         const userId = req.params.userId;
         const notifications = await Notification.find({ user: userId }).sort({ createdAt: -1 });
+
+        // Emit the notifications to the specific user via Socket.io
+        const userSocket = global.onlineUsers.get(userId);
+        if (userSocket) {
+            globalIO.to(userSocket).emit('user-notifications', notifications);
+            console.log(`Notifications emitted to user ${userId}:`, notifications);
+        }
+
         res.json(notifications);
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server Error' });
     }
 };
+
 
 export const createNotificationForOwner = async (loggedInUserId, ownerId, message) => {
     try {
