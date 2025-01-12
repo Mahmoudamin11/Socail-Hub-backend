@@ -85,20 +85,9 @@ export const sendMessage = async (req, res, next) => {
         photoUrl,
         videoUrl,
         type: 'chat',
-      });
-      await message.save();
-
-      // ** Add additional updates here **
-      // Save the message to the sender's message history
-      await Message.create({
-        senderId,
-        receiverId,
-        content,
-        photoUrl,
-        videoUrl,
-        type: 'chat',
         status: 'sent', // Add a status field for tracking
       });
+      await message.save();
 
       // Update the receiver's message inbox
       await User.findByIdAndUpdate(receiverId, {
