@@ -25,6 +25,34 @@ const CommunitySchema = new mongoose.Schema(
         ref: 'Message',
       },
     ],
+    invitations: [
+      {
+        senderId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        receiverId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+        },
+        accepted: {
+          type: Boolean,
+          default: false,
+        },
+        senderName: {
+          type: String,
+        },
+        senderProfilePicture: {
+          type: String,
+        },
+        receiverName: {
+          type: String,
+        },
+        receiverProfilePicture: {
+          type: String,
+        },
+      },
+    ],
   },
   { timestamps: true }
 );
