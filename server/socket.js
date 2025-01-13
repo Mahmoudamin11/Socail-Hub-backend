@@ -8,6 +8,9 @@ const io = new Server({
   },
 });
 
+// Object to keep track of online users
+global.onlineUsers = new Map();
+
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
@@ -16,12 +19,27 @@ io.on("connection", (socket) => {
     global.onlineUsers.set(userId, socket.id);
   });
 
+  socket.on("join-community", (communityId) => {
+    socket.join(communityId);
+    console.log(`User with socket ID ${socket.id} joined community ${communityId}`);
+  });
+
+  socket.on("leave-community", (communityId) => {
+    socket.leave(communityId);
+    console.log(`User with socket ID ${socket.id} left community ${communityId}`);
+  });
+
   socket.on("send-notification", (data) => {
     console.log(`Notification sent to: ${data.to}`);
     const sendUserSocket = global.onlineUsers.get(data.to);
     if (sendUserSocket) {
       socket.to(sendUserSocket).emit("notification-received", data);
     }
+  });
+
+  socket.on("send-community-message", (data) => {
+    console.log(`Message sent to community ${data.communityId}`);
+    io.to(data.communityId).emit("community-message-received", data);
   });
 
   socket.on("disconnect", () => {

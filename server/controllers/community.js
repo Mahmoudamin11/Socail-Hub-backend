@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import { createNotificationForUser, sendNotificationsToCommunityMembers,createNotificationForOwner } from './notification.js';
 import Notification from '../models/Notification.js';
 import { addHistory } from '../controllers/historyController.js'; // Import the function to add history entries
+import io from '../socket.js'; // Adjust the path to your actual Socket.io instance
 
 import mongoose from 'mongoose';
 
@@ -106,57 +107,64 @@ export const sendInvitation = async (req, res) => {
 
 
 
-// Function to accept an invitation
+
 export const acceptInvitation = async (req, res) => {
   try {
-      const { communityId } = req.body;
+    const { communityId } = req.body;
 
-      // Check if the user has received an invitation
-      const user = await User.findById(req.user.id);
+    // Check if the user has received an invitation
+    const user = await User.findById(req.user.id);
 
-      // Ensure that user and user.invitations are defined
-      if (!user || !user.invitations || !Array.isArray(user.invitations)) {
-          return res.status(400).json({ message: 'Invalid user or invitations array' });
-      }
+    // Ensure that user and user.invitations are defined
+    if (!user || !user.invitations || !Array.isArray(user.invitations)) {
+      return res.status(400).json({ message: 'Invalid user or invitations array' });
+    }
 
-      // Convert communityId to a string for accurate comparison
-      const stringCommunityId = communityId.toString();
+    // Convert communityId to a string for accurate comparison
+    const stringCommunityId = communityId.toString();
 
-      // Find the invitation in the user's invitations array
-      const invitationIndex = user.invitations.findIndex(invitation => {
-          return invitation.communityId && invitation.communityId.toString() === stringCommunityId;
-      });
+    // Find the invitation in the user's invitations array
+    const invitationIndex = user.invitations.findIndex(invitation => {
+      return invitation.communityId && invitation.communityId.toString() === stringCommunityId;
+    });
 
-      // If the invitation doesn't exist, return an error
-      if (invitationIndex === -1) {
-          return res.status(400).json({ message: 'No invitation received for this community' });
-      }
+    // If the invitation doesn't exist, return an error
+    if (invitationIndex === -1) {
+      return res.status(400).json({ message: 'No invitation received for this community' });
+    }
 
-      // Add the user to the community members
-      const community = await Community.findById(communityId);
-      community.members.push(req.user.id);
+    // Add the user to the community members
+    const community = await Community.findById(communityId);
+    community.members.push(req.user.id);
 
-      // Add the community to the user's communities list
-      user.communities.push(communityId);
+    // Add the community to the user's communities list
+    user.communities.push(communityId);
 
-      await community.save();
+    await community.save();
 
-      // Remove the invitation from the user's list
-      user.invitations.splice(invitationIndex, 1);
-      await user.save();
+    // Remove the invitation from the user's list
+    user.invitations.splice(invitationIndex, 1);
+    await user.save();
 
-      // Notify the admin that the user accepted the invitation
-      const adminNotificationMessage = `${user.name} accepted the invitation to join the community "${community.name}"`;
-      await createNotificationForOwner(req.user.id, community.admins, adminNotificationMessage);
+    // Notify the admin that the user accepted the invitation
+    const adminNotificationMessage = `${user.name} accepted the invitation to join the community "${community.name}"`;
+    await createNotificationForOwner(req.user.id, community.admins, adminNotificationMessage);
 
-      // Send notifications to all community members about the new member
-      await sendNotificationsToCommunityMembers(community.id, req.user.id);
-      await addHistory(req.user.id, `accepted Invitation for Community: "${community.name}"`);
+    // Send notifications to all community members about the new member
+    await sendNotificationsToCommunityMembers(community.id, req.user.id);
+    await addHistory(req.user.id, `accepted Invitation for Community: "${community.name}"`);
 
-      res.status(200).json({ message: 'Invitation accepted successfully' });
+    // Make the user join the community room
+    const userSocketId = global.onlineUsers.get(req.user.id);
+    if (userSocketId) {
+      io.sockets.sockets.get(userSocketId).join(communityId);
+      console.log(`User with socket ID ${userSocketId} joined community room ${communityId}`);
+    }
+
+    res.status(200).json({ message: 'Invitation accepted successfully' });
   } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Server Error' });
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
   }
 };
 
@@ -237,63 +245,70 @@ export const getCommunityById = async (req, res) => {
   }
 };
 
-// Function to allow a user to exit a community
+
 export const exitCommunity = async (req, res) => {
   try {
-      const { communityId } = req.params; // Extract communityId from request parameters
+    const { communityId } = req.params; // Extract communityId from request parameters
 
-      // Find the community
-      const community = await Community.findById(communityId);
-      if (!community) {
-          return res.status(404).json({ message: 'Community not found' });
-      }
+    // Find the community
+    const community = await Community.findById(communityId);
+    if (!community) {
+      return res.status(404).json({ message: 'Community not found' });
+    }
 
-      // Check if the user is a member of the community
-      if (!community.members.includes(req.user.id)) {
-          return res.status(400).json({ message: 'You are not a member of this community' });
-      }
+    // Check if the user is a member of the community
+    if (!community.members.includes(req.user.id)) {
+      return res.status(400).json({ message: 'You are not a member of this community' });
+    }
 
-      // If the user is an admin, handle admin reassignment
-      if (community.admins.includes(req.user.id)) {
-          // Remove the current admin from the admin list
-          community.admins = community.admins.filter(adminId => adminId.toString() !== req.user.id);
+    // If the user is an admin, handle admin reassignment
+    if (community.admins.includes(req.user.id)) {
+      // Remove the current admin from the admin list
+      community.admins = community.admins.filter(adminId => adminId.toString() !== req.user.id);
 
-          // Assign a new admin if there are other members
-          if (community.members.length > 1) {
-              const newAdminId = community.members.find(memberId => memberId.toString() !== req.user.id);
-              if (newAdminId) {
-                  community.admins.push(newAdminId);
+      // Assign a new admin if there are other members
+      if (community.members.length > 1) {
+        const newAdminId = community.members.find(memberId => memberId.toString() !== req.user.id);
+        if (newAdminId) {
+          community.admins.push(newAdminId);
 
-                  // Add the community to the new admin's communities list only if not already present
-                  const newAdmin = await User.findById(newAdminId);
-                  if (newAdmin && !newAdmin.communities.includes(communityId)) {
-                      newAdmin.communities.push(communityId);
-                      await newAdmin.save();
-                  }
-
-                  // Notify the new admin
-                  const notificationMessage = `You have been assigned as the new admin of the community "${community.name}".`;
-                  await createNotificationForUser(req.user.id, newAdminId, notificationMessage);
-              }
+          // Add the community to the new admin's communities list only if not already present
+          const newAdmin = await User.findById(newAdminId);
+          if (newAdmin && !newAdmin.communities.includes(communityId)) {
+            newAdmin.communities.push(communityId);
+            await newAdmin.save();
           }
+
+          // Notify the new admin
+          const notificationMessage = `You have been assigned as the new admin of the community "${community.name}".`;
+          await createNotificationForUser(req.user.id, newAdminId, notificationMessage);
+        }
       }
+    }
 
-      // Remove the user from the community's members list
-      community.members = community.members.filter(memberId => memberId.toString() !== req.user.id);
-      await community.save();
+    // Remove the user from the community's members list
+    community.members = community.members.filter(memberId => memberId.toString() !== req.user.id);
+    await community.save();
 
-      // Remove the community from the user's communities list
-      const user = await User.findById(req.user.id);
-      user.communities = user.communities.filter(id => id.toString() !== communityId);
-      await user.save();
+    // Remove the community from the user's communities list
+    const user = await User.findById(req.user.id);
+    user.communities = user.communities.filter(id => id.toString() !== communityId);
+    await user.save();
 
-      // Add history entry
-      await addHistory(req.user.id, `Exited Community: "${community.name}"`);
+    // Add history entry
+    await addHistory(req.user.id, `Exited Community: "${community.name}"`);
 
-      res.status(200).json({ message: 'You have exited the community successfully' });
+    // Make the user leave the community room
+    const userSocketId = global.onlineUsers.get(req.user.id);
+    if (userSocketId) {
+      io.sockets.sockets.get(userSocketId).leave(communityId);
+      console.log(`User with socket ID ${userSocketId} left community room ${communityId}`);
+    }
+
+    res.status(200).json({ message: 'You have exited the community successfully' });
   } catch (error) {
-      console.error(error);
-      res.status(500).json({ message: 'Server Error' });
+    console.error(error);
+    res.status(500).json({ message: 'Server Error' });
   }
 };
 
